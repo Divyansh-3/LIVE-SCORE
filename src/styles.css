@@ -1,58 +1,325 @@
-html,body{margin:0;background:transparent}
-*{box-sizing:border-box}
-/* ---------- overlay ---------- */
-.ovr{position:fixed;inset:0;overflow:hidden;background:transparent}
-.stage{position:absolute;left:50%;top:50%;width:1920px;height:1080px;transform-origin:center}
-.scene{position:absolute;inset:0;animation:fade .45s ease}
-.abs,.plate,.el{position:absolute}
-.plate::before{content:'';position:absolute;left:0;top:0;bottom:0;width:8px;background:var(--accent)}
-.plate::after{content:'';position:absolute;inset:0;background:linear-gradient(100deg,rgba(255,255,255,.07),transparent 45%);pointer-events:none}
-.el{white-space:nowrap;line-height:1.05;text-transform:uppercase}
-.badge{display:grid;place-items:center;border:2px solid;border-radius:4px;font-weight:800}
-.card{display:flex;align-items:center;gap:.5em;padding:.3em .8em}
-.vs{font-size:1em;padding:0 .3em}
-.pop{display:inline-block;animation:pop .5s cubic-bezier(.2,1.6,.4,1)}
-.pop-n{display:inline-block;animation:slide .4s ease}
-@keyframes fade{from{opacity:0;transform:translateY(14px)}}
-@keyframes pop{from{transform:scale(1.55);filter:brightness(2.2)}}
-@keyframes slide{from{opacity:0;transform:translateX(-18px)}}
-@keyframes blink{to{opacity:.3}}
-.noanim,.noanim *{animation:none!important;transition:none!important}
-/* ---------- control panel ---------- */
-.cp{background:#0b0f19;color:#dfe6f3;font:14px "Segoe UI",Arial,sans-serif;height:100vh;overflow:auto;padding:12px}
-.cp h3{margin:14px 0 6px;font-size:13px;color:#00e5ff;letter-spacing:.5px}
-.cp button{background:#18213a;color:#dfe6f3;border:1px solid #2b3a63;border-radius:4px;padding:5px 10px;cursor:pointer}
-.cp button:hover{background:#22305a}.cp button.on{background:#00e5ff;color:#001018;border-color:#00e5ff}
-.cp button.danger{border-color:#a33}
-.cp input,.cp select{background:#111827;color:#fff;border:1px solid #2b3a63;border-radius:4px;padding:5px;min-width:0}
-.cp input[type=number]{width:70px}.cp input[type=color]{padding:0;width:40px;height:26px}
-.top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid #1f2a48}
-.grid{display:grid;grid-template-columns:270px 1fr 660px;gap:16px;margin-top:10px}
-.mi{display:flex;gap:6px;align-items:center;padding:7px;border:1px solid #1f2a48;border-radius:4px;margin-bottom:5px;cursor:pointer}
-.mi.sel{border-color:#00e5ff;background:#101a30}
-.tag{font-size:10px;padding:1px 5px;border-radius:3px;background:#ff3d6e;color:#fff}.tag.n{background:#ffb020;color:#000}
-.num,.txt{display:flex;align-items:center;gap:4px;margin:3px 0}
-.num>span,.txt>span{min-width:92px;color:#9fb0d0}.txt input{flex:1}
-.row{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;border-bottom:1px solid #151d33;padding:5px 0}
-.row>b{width:140px;font-weight:600}
-.pv{position:sticky;top:0;width:640px;height:360px;overflow:hidden;border:1px solid #2b3a63;background:repeating-conic-gradient(#222 0 25%,#333 0 50%) 0 0/20px 20px}
-.pv iframe{width:1920px;height:1080px;border:0;transform:scale(.3333);transform-origin:0 0}
-.big{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;margin:4px 0}
-.btns{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0}
-/* ---- simplified control layout ---- */
-.cp{font-size:15px}
-.grid{grid-template-columns:310px 1fr 500px}
-.pv{position:relative;width:480px;height:270px;margin-bottom:6px}.pv iframe{transform:scale(.25)}
-.hint{color:#7f8fb0;font-size:12px;font-weight:400;margin:4px 0}
-.onair{padding:6px 12px;border:1px solid #2b3a63;border-radius:4px;background:#101a30}
-.pg{display:flex;gap:10px;align-items:center;padding:10px;border:2px solid #1f2a48;border-radius:6px;margin-bottom:6px;cursor:pointer}
-.pg.sel{border-color:#00e5ff;background:#101a30}.pg.air{box-shadow:0 0 0 2px #ff3d6e inset}
-.pg .no{font-size:24px;width:30px;text-align:center;color:#00e5ff}.pg small{color:#7f8fb0}
-.cp button.go{background:#12b76a;border-color:#12b76a;color:#001a0d;font-weight:700;padding:7px 12px}
-.box{border:1px solid #1f2a48;border-radius:6px;padding:4px 10px;margin:8px 0}
-.bigscore{font-size:30px;width:50px}
-.menu summary{cursor:pointer;padding:5px 10px;border:1px solid #2b3a63;border-radius:4px}
-.menu{position:relative}.menu .pop{position:absolute;right:0;top:34px;z-index:5;background:#111827;border:1px solid #2b3a63;padding:10px;width:340px;border-radius:6px}
-.mlist{max-height:300px;overflow:auto;padding-right:4px}.pg.cur{box-shadow:0 0 0 2px #ffb020 inset}
-.strip{display:flex;gap:26px;align-items:center;flex-wrap:wrap;margin:10px 0;padding:10px 14px;border:1px solid #1f2a48;border-radius:6px;background:#0e1526}
-.side{display:flex;gap:8px;align-items:center}.nm{min-width:150px;font-weight:600}
+/* =====================================================================
+   styles.css
+   1. Base                – shared reset, transparent page
+   2. OBS overlay         – everything OBS shows (Overlay.tsx)
+   3. Control panel       – the page you use in your browser (Control.tsx)
+   ===================================================================== */
+
+
+/* ---------------------------------------------------------------------
+   1. BASE
+   --------------------------------------------------------------------- */
+html,
+body {
+  margin: 0;
+  background: transparent;          /* keeps OBS see-through */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+
+/* ---------------------------------------------------------------------
+   2. OBS OVERLAY
+   The overlay is drawn on a fixed 1920×1080 "stage" that is scaled to fit
+   whatever size the OBS Browser Source has (scaling is done in Overlay.tsx).
+   --------------------------------------------------------------------- */
+
+/* Full-window wrapper: transparent, never scrolls */
+.ovr {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+/* The 1920×1080 canvas, centred and scaled */
+.stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: center;
+}
+
+/* One page; re-created (and fades in) every time the page changes */
+.scene {
+  position: absolute;
+  inset: 0;
+  animation: fade 0.45s ease;
+}
+
+/* Images placed freely on the stage (background, banner) */
+.abs {
+  position: absolute;
+}
+
+/* Any text element positioned by the Position & size tab */
+.el {
+  position: absolute;
+  white-space: nowrap;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
+/* --- Scoreboard card: [logo] NAME  1 — 0  NAME [logo] --- */
+.card {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.3em 0.8em;
+}
+
+.vs {                               /* the score between the two names */
+  font-size: 1em;
+  padding: 0 0.3em;
+}
+
+/* Placeholder shown when a team has no logo (shows its short name) */
+.badge {
+  display: grid;
+  place-items: center;
+  border: 2px solid;
+  border-radius: 4px;
+  font-weight: 800;
+}
+
+/* --- Animations --- */
+.pop {                              /* score changes */
+  display: inline-block;
+  animation: pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+
+@keyframes fade  { from { opacity: 0; transform: translateY(14px); } }
+@keyframes pop   { from { transform: scale(1.55); filter: brightness(2.2); } }
+@keyframes blink { to   { opacity: 0.3; } }       /* countdown reaches 00:00 */
+
+/* "Animations" switch turned off in the control panel */
+.noanim,
+.noanim * {
+  animation: none !important;
+  transition: none !important;
+}
+
+
+/* ---------------------------------------------------------------------
+   3. CONTROL PANEL
+   --------------------------------------------------------------------- */
+.cp {
+  --bg:      #0b0f19;               /* page background */
+  --surface: #111827;               /* inputs, popups */
+  --card:    #0e1526;               /* panels */
+  --line:    #1f2a48;               /* thin borders */
+  --line-hi: #2b3a63;               /* input / button borders */
+  --text:    #dfe6f3;
+  --muted:   #7f8fb0;
+  --accent:  #00e5ff;               /* cyan highlight */
+  --green:   #12b76a;               /* main action buttons */
+  --red:     #ff3d6e;               /* ON AIR */
+  --amber:   #ffb020;               /* CURRENT match */
+
+  background: var(--bg);
+  color: var(--text);
+  font: 15px "Segoe UI", Arial, sans-serif;
+  height: 100vh;
+  overflow: auto;
+  padding: 12px;
+}
+
+/* --- Headings & small text --- */
+.cp h3 {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+}
+
+.hint {
+  margin: 4px 0;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* --- Buttons --- */
+.cp button {
+  background: #18213a;
+  color: var(--text);
+  border: 1px solid var(--line-hi);
+  border-radius: 4px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.cp button:hover      { background: #22305a; }
+.cp button.on         { background: var(--accent); border-color: var(--accent); color: #001018; }  /* selected tab */
+.cp button.danger     { border-color: #aa3333; }
+.cp button.go         { background: var(--green); border-color: var(--green); color: #001a0d; font-weight: 700; padding: 7px 12px; }  /* main action */
+
+/* --- Inputs --- */
+.cp input,
+.cp select {
+  min-width: 0;
+  padding: 5px;
+  background: var(--surface);
+  color: #fff;
+  border: 1px solid var(--line-hi);
+  border-radius: 4px;
+}
+.cp input[type=number] { width: 70px; }
+.cp input[type=color]  { width: 40px; height: 26px; padding: 0; }
+
+/* --- Form rows --- */
+.num,
+.txt {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 3px 0;
+}
+.num > span,
+.txt > span { min-width: 92px; color: #9fb0d0; }   /* label */
+.txt input  { flex: 1; }
+
+.btns {                             /* a row of buttons */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.row {                              /* one line in "Position & size" */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 5px 0;
+  border-bottom: 1px solid #151d33;
+}
+.row > b { width: 140px; font-weight: 600; }
+
+.box {                              /* framed group, e.g. one team */
+  margin: 8px 0;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+/* --- Top bar --- */
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.onair {                            /* "ON OBS NOW: …" */
+  padding: 6px 12px;
+  border: 1px solid var(--line-hi);
+  border-radius: 4px;
+  background: #101a30;
+}
+
+.menu { position: relative; }       /* ⚙ Backup & settings dropdown */
+.menu summary {
+  padding: 5px 10px;
+  border: 1px solid var(--line-hi);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.menu-body {
+  position: absolute;
+  right: 0;
+  top: 34px;
+  z-index: 5;
+  width: 340px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-hi);
+  border-radius: 6px;
+}
+
+/* --- Score strip (always visible under the top bar) --- */
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 26px;
+  margin: 10px 0;
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.side      { display: flex; align-items: center; gap: 8px; }   /* one team's score controls */
+.nm        { min-width: 150px; font-weight: 600; }
+.bigscore  { width: 50px; font-size: 30px; }
+
+/* --- Three-column layout: lists | editor | previews --- */
+.grid {
+  display: grid;
+  grid-template-columns: 310px 1fr 500px;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+/* --- Match & page list cards --- */
+.mlist {                            /* scrollable match list */
+  max-height: 300px;
+  padding-right: 4px;
+  overflow: auto;
+}
+
+.pg {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  padding: 10px;
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.pg .no    { width: 30px; text-align: center; font-size: 24px; color: var(--accent); }
+.pg small  { color: var(--muted); }
+.pg.sel    { border-color: var(--accent); background: #101a30; }          /* being edited */
+.pg.air    { box-shadow: 0 0 0 2px var(--red)   inset; }                  /* page on OBS */
+.pg.cur    { box-shadow: 0 0 0 2px var(--amber) inset; }                  /* current match */
+
+.tag {                              /* ON AIR / CURRENT badge */
+  padding: 1px 5px;
+  font-size: 10px;
+  color: #fff;
+  background: var(--red);
+  border-radius: 3px;
+}
+.tag.n { color: #000; background: var(--amber); }
+
+/* --- Countdown readout --- */
+.big {
+  margin: 4px 0;
+  font-size: 34px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Live previews: a 1920×1080 iframe shrunk to 480×270 --- */
+.pv {
+  position: relative;
+  width: 480px;
+  height: 270px;
+  margin-bottom: 6px;
+  overflow: hidden;
+  border: 1px solid var(--line-hi);
+  background: repeating-conic-gradient(#222 0 25%, #333 0 50%) 0 0 / 20px 20px;   /* checkerboard = transparent */
+}
+.pv iframe {
+  width: 1920px;
+  height: 1080px;
+  border: 0;
+  transform: scale(0.25);
+  transform-origin: 0 0;
+}

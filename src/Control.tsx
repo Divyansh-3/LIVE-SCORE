@@ -108,7 +108,7 @@ export default function Control() {
         <button onClick={() => air(null)}>Hide overlay (key 0)</button>
         <span style={{ flex: 1 }} />
         <span>Paste in OBS: <input readOnly value={url} style={{ width: 200 }} onFocus={e => e.target.select()} /></span>
-        <details className="menu"><summary>⚙ Backup &amp; settings</summary><div className="pop">
+        <details className="menu"><summary>⚙ Backup &amp; settings</summary><div className="menu-body">
           <Chk l="Animations" v={st.anim} set={v => up(d => { d.anim = v })} />
           <div className="btns"><button onClick={exp}>Save configuration</button>
             <label><button onClick={e => (e.currentTarget.nextSibling as HTMLInputElement).click()}>Load configuration</button><input type="file" accept=".json" hidden onChange={e => e.target.files?.[0] && imp(e.target.files[0])} /></label>
