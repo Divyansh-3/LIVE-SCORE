@@ -32,7 +32,6 @@ The project provides a separate control panel for managing teams, scores, match 
 - 🖥️ Designed around a 1920×1080 broadcast canvas
 - 🌐 Runs locally without requiring a paid service
 
-
 ## 🚀 Getting Started
 
 ### 1. Clone the repository
