@@ -37,13 +37,13 @@ The project provides a separate control panel for managing teams, scores, match 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/esports-scoreboard-overlay.git
+git clone https://github.com/Divyansh-3/LIVE_SCORE.git
 ```
 
 ### 2. Enter the project directory
 
 ```bash
-cd esports-scoreboard-overlay
+cd LIVE-SCORE
 ```
 
 ### 3. Install dependencies
