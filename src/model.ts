@@ -52,6 +52,7 @@ export interface Match {
   fmt: "BO1" | "BO3" | "BO5";
 }
 export interface Page {
+  kind?: "bracket";
   id: string;
   name: string;
   title: string;
@@ -68,11 +69,29 @@ export interface Preset {
   style: Partial<Style>;
   layout?: Record<string, El>;
 }
+export interface BracketMatch {
+  id: string;
+  matchId: string;
+  nextMatchId: string | null;
+  completed: boolean;
+  label: string;
+}
+export interface BracketRound {
+  id: string;
+  name: string;
+  matches: BracketMatch[];
+}
+export interface Bracket {
+  format: "single-elimination" | "double-elimination";
+  rounds: BracketRound[];
+}
 export interface State {
   pages: Page[];
   airId: string | null;
   matches: Match[];
+  bracket: Bracket | null;
   curId: string;
+  rev: number;
   custom: Preset | null;
   anim: boolean;
 }
@@ -145,6 +164,11 @@ export const LAYOUT: Record<string, El> = {
   board: { x: 960, y: 730, s: 48 },
   binfo: { x: 960, y: 840, s: 28 },
 };
+export const BRACKET_LAYOUT: Record<string, El> = {
+  banner: { x: 0, y: 0, s: 1920, h: 1080 },
+  btitle: { x: 960, y: 60, s: 56 },
+  board: { x: 100, y: 200, s: 28, h: 800 }, // x,y = top-left · s = text size · h = height (width = 1920 − 2·x)
+};
 export const uid = () => Math.random().toString(36).slice(2, 9);
 export const mkScene = (t: number): Scene => ({
   layout: structuredClone(LAYOUT),
@@ -168,6 +192,18 @@ export const mkPage = (name: string): Page => ({
   matchId: "",
   scene: mkScene(120000),
 });
+/** The bracket screen: shown on OBS like a page, but listed in its own section and with its OWN banner. */
+export const mkBracketPage = (): Page => {
+  const scene = mkScene(0);
+  scene.layout = structuredClone(BRACKET_LAYOUT);
+  return {
+    ...mkPage("Bracket"),
+    id: "bracket-screen",
+    kind: "bracket",
+    title: "TOURNAMENT BRACKET",
+    scene,
+  };
+};
 export function mkState(): State {
   const soon = mkPage("Starting soon"),
     b1 = mkPage("Break 1"),
@@ -200,12 +236,14 @@ export function mkState(): State {
     tm("STORM RIDERS", "SR", "LUNAR FOX", "LF", "BO5"),
   ];
   return {
-    pages: [soon, b1, b2],
+    pages: [soon, b1, b2, mkBracketPage()],
     airId: soon.id,
     custom: null,
     anim: true,
     matches: ms,
+    bracket: null,
     curId: ms[0].id,
+    rev: 0,
   };
 }
 export const mkMatch = (): Match => ({
@@ -216,13 +254,24 @@ export const mkMatch = (): Match => ({
   a: { name: "TEAM A", abbr: "A", logo: "", score: 0 },
   b: { name: "TEAM B", abbr: "B", logo: "", score: 0 },
 });
+const withBracketPage = (s: any) =>
+  s.pages.some((p: any) => p.kind === "bracket")
+    ? s
+    : { ...s, pages: [...s.pages, mkBracketPage()] };
 // upgrade saves from the single-match version
 export function migrate(s: any): State | null {
-  if (s?.pages && s.matches) return s;
+  if (s?.pages && s.matches)
+    return withBracketPage({ bracket: null, rev: 0, ...s });
   if (s?.pages && s.match) {
     const m = { id: uid(), ...s.match };
     const { match, ...rest } = s;
-    return { ...rest, matches: [m], curId: m.id };
+    return withBracketPage({
+      ...rest,
+      matches: [m],
+      curId: m.id,
+      bracket: null,
+      rev: 0,
+    });
   }
   return null;
 }
@@ -247,15 +296,4 @@ export function useNow(ms = 200) {
     return () => clearInterval(t);
   }, [ms]);
   return n;
-}
-export function useRemote(): State | null {
-  const [s, set] = useState<State | null>(null);
-  useEffect(() => {
-    const es = new EventSource("/api/events");
-    es.onmessage = (e) => {
-      if (e.data) set(JSON.parse(e.data));
-    };
-    return () => es.close();
-  }, []);
-  return s;
 }

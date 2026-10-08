@@ -1,5 +1,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { cdLeft, fmtT, rgba, useNow, useRemote, type Style } from "./model";
+import { cdLeft, fmtT, rgba, useNow, type Style } from "./model";
+import { useSharedState } from "./storage/sync";
+import { winnerOf } from "./bracket/bracket";
 
 const CENTER = new Set(["btitle", "bsub", "cd", "board", "binfo"]);
 const FMT = { BO1: "BEST OF 1", BO3: "BEST OF 3", BO5: "BEST OF 5" };
@@ -41,7 +43,7 @@ function Logo({
 }
 
 export default function Overlay() {
-  const st = useRemote(),
+  const st = useSharedState(),
     now = useNow();
   const [k, setK] = useState(1);
   useEffect(() => {
@@ -101,9 +103,121 @@ export default function Overlay() {
     opacity: s.opacity,
     "--accent": s.accent,
   } as CSSProperties;
-  const bn = mt.banner || p.banner;
+  const bn = p.kind === "bracket" ? p.banner : mt.banner || p.banner; // the bracket screen has its OWN banner
   const ls = (L.board?.s || 48) * 1.4;
   const blink = done ? { animation: "blink .6s 4 alternate" } : {};
+
+  // ---- bracket screen: one column per round, connector lines between rounds ----
+  const bracketView = (() => {
+    const b = st.bracket,
+      B = L.board;
+    if (p.kind !== "bracket" || !B || B.on === false) return null;
+    if (!b) return E("board", "No bracket created yet");
+    const W = 1920 - 2 * B.x,
+      H = B.h || 800,
+      R = b.rounds.length;
+    const gap = Math.min(110, W / (R * 4)),
+      colW = (W - gap * (R - 1)) / R;
+    const cardH = Math.min(B.s * 3.1, (H / b.rounds[0].matches.length) * 0.9);
+    const cx = (r: number) => r * (colW + gap);
+    const cy = (r: number, i: number) =>
+      ((i + 0.5) * H) / b.rounds[r].matches.length;
+    return E(
+      "board",
+      <>
+        <svg
+          width={W}
+          height={H}
+          style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}
+        >
+          {b.rounds.slice(0, -1).flatMap((rd, r) =>
+            rd.matches.map((_, i) => {
+              const x1 = cx(r) + colW,
+                y1 = cy(r, i),
+                x2 = cx(r + 1),
+                y2 = cy(r + 1, i >> 1),
+                mx = x1 + gap / 2;
+              return (
+                <path
+                  key={r + "-" + i}
+                  d={`M${x1} ${y1}H${mx}V${y2}H${x2}`}
+                  fill="none"
+                  stroke={s.accent}
+                  strokeOpacity=".6"
+                  strokeWidth="3"
+                />
+              );
+            }),
+          )}
+        </svg>
+        {b.rounds.map((rd, r) => (
+          <div key={rd.id}>
+            <div
+              style={{
+                position: "absolute",
+                left: cx(r),
+                top: -B.s * 1.7,
+                width: colW,
+                textAlign: "center",
+                color: s.accent,
+                fontSize: B.s * 0.8,
+              }}
+            >
+              {rd.name}
+            </div>
+            {rd.matches.map((bm, i) => {
+              const m = st.matches.find((x) => x.id === bm.matchId);
+              if (!m) return null;
+              const w = bm.completed ? winnerOf(m, true) : null;
+              return (
+                <div
+                  key={bm.id}
+                  style={{
+                    position: "absolute",
+                    left: cx(r),
+                    top: cy(r, i) - cardH / 2,
+                    width: colW,
+                    height: cardH,
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    padding: "0 .5em",
+                    ...box,
+                    borderColor: m.id === st.curId ? s.scoreC : s.accent,
+                  }}
+                >
+                  {(["a", "b"] as const).map((t) => (
+                    <div
+                      key={t}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: ".5em",
+                        color:
+                          w === t
+                            ? s.scoreC
+                            : w
+                              ? "rgba(255,255,255,.45)"
+                              : s.nameC,
+                      }}
+                    >
+                      <span
+                        style={{ overflow: "hidden", textOverflow: "ellipsis" }}
+                      >
+                        {m[t].name}
+                      </span>
+                      {p.showBoard && <b>{m[t].score}</b>}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </>,
+      { width: W, height: H, transform: "none" },
+    ); // 'none': the bracket is positioned from its top-left, NOT centred
+  })();
 
   return (
     <div className="ovr">
@@ -139,7 +253,8 @@ export default function Overlay() {
           {E("btitle", p.title)}
           {E("bsub", done ? p.done : p.sub)}
           {p.showCd && E("cd", fmtT(left), blink)}
-          {p.showBoard &&
+          {p.kind !== "bracket" &&
+            p.showBoard &&
             E(
               "board",
               <div className="card" style={box}>
@@ -161,6 +276,7 @@ export default function Overlay() {
               "binfo",
               [FMT[mt.fmt], p.info, mt.tour].filter(Boolean).join(" · "),
             )}
+          {bracketView}
         </div>
       </div>
     </div>

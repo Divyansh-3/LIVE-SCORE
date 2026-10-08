@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import BracketPanel from "./bracket/BracketPanel";
+import { loadOrInit, saveState } from "./storage/db";
+import { closePublisher, publish, subscribe } from "./storage/sync";
 import {
   PRESETS,
   cdLeft,
@@ -13,6 +16,7 @@ import {
   type Scene,
   type State,
   type Style,
+  type Team,
 } from "./model";
 
 const L: Record<string, string> = {
@@ -179,31 +183,85 @@ const parseT = (s: string) => {
 export default function Control() {
   const [st, setSt] = useState<State | null>(null);
   const [sel, setSel] = useState("");
-  const [tab, setTab] = useState<"page" | "match" | "layout" | "look">("page");
+  const [tab, setTab] = useState<
+    "page" | "match" | "bracket" | "layout" | "look"
+  >("page");
   const [pre, setPre] = useState("Modern"),
     [tgt, setTgt] = useState("this"),
     [tin, setTin] = useState("01:30"),
     [clk, setClk] = useState("22:00"),
     [msel, setMsel] = useState("");
   const now = useNow();
-  const air = (id: string | null) => setSt((s) => s && { ...s, airId: id });
+  const [err, setErr] = useState(""),
+    [memOnly, setMem] = useState(false),
+    [saved, setSaved] = useState<Date | null>(null),
+    [saveErr, setSaveErr] = useState("");
+  // In-page dialogs (browser alert/confirm can be blocked or hidden, which made buttons look dead)
+  const [dlg, setDlg] = useState<{ msg: string; yes?: () => void } | null>(
+    null,
+  );
+  const say = (msg: string) => setDlg({ msg });
+  const ask = (msg: string, yes: () => void) => setDlg({ msg, yes });
+  const stRef = useRef<State | null>(null),
+    savedRev = useRef(-1);
+  const air = (id: string | null) =>
+    setSt((s) => s && { ...s, airId: id, rev: s.rev + 1 });
+
+  // Load (or create on first launch) the tournament from IndexedDB
   useEffect(() => {
-    fetch("/api/state")
-      .then((r) => r.json())
-      .then((s) => {
-        const v: State = migrate(s) || mkState();
+    loadOrInit()
+      .then((v) => {
+        savedRev.current = v.rev;
         setSt(v);
         setSel(v.airId || v.pages[0].id);
-      });
+        setSaved(new Date());
+      })
+      .catch((e) => setErr(String(e?.message || e)));
   }, []);
+  // Broadcast quickly (40 ms) and save with a small debounce (400 ms)
   useEffect(() => {
-    if (!st) return;
-    const t = setTimeout(
-      () => fetch("/api/state", { method: "POST", body: JSON.stringify(st) }),
-      120,
-    );
-    return () => clearTimeout(t);
-  }, [st]);
+    stRef.current = st;
+    if (!st || st.rev <= savedRev.current) return;
+    const pub = setTimeout(() => publish(st), 40);
+    const sv = setTimeout(() => {
+      if (memOnly) return;
+      saveState(st)
+        .then(() => {
+          savedRev.current = Math.max(savedRev.current, st.rev);
+          setSaved(new Date());
+          setSaveErr("");
+        })
+        .catch((e) => setSaveErr(String(e?.message || e)));
+    }, 400);
+    return () => {
+      clearTimeout(pub);
+      clearTimeout(sv);
+    };
+  }, [st, memOnly]);
+  // A newer state from ANOTHER Control tab replaces ours (an old tab can never overwrite a newer one)
+  useEffect(
+    () =>
+      subscribe((n) => {
+        const c = stRef.current;
+        if (c && n.rev > c.rev) {
+          savedRev.current = n.rev;
+          setSt(n);
+        }
+      }),
+    [],
+  );
+  // Last-chance save when the tab closes; close the channel on unmount
+  useEffect(() => {
+    const f = () => {
+      const s = stRef.current;
+      if (s && s.rev > savedRev.current && !memOnly) saveState(s);
+    };
+    addEventListener("pagehide", f);
+    return () => {
+      removeEventListener("pagehide", f);
+      closePublisher();
+    };
+  }, [memOnly]);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (
@@ -212,8 +270,9 @@ export default function Control() {
       )
         return;
       if (e.key === "0") air(null);
-      const i = +e.key;
-      if (i >= 1 && st.pages[i - 1]) air(st.pages[i - 1].id);
+      const list = st.pages.filter((x) => x.kind !== "bracket"),
+        i = +e.key;
+      if (i >= 1 && list[i - 1]) air(list[i - 1].id);
     };
     addEventListener("keydown", h);
     return () => removeEventListener("keydown", h);
@@ -221,7 +280,30 @@ export default function Control() {
   if (!st)
     return (
       <div className="cp">
-        Loading… (make sure <code>npm run dev</code> is running)
+        {err ? (
+          <div className="box">
+            <h3>⚠ Could not open the local database</h3>
+            <p>{err}</p>
+            <p className="hint">
+              Your browser may be blocking storage (private/incognito window?).
+              You can continue, but nothing will be saved — export a backup
+              often.
+            </p>
+            <button
+              className="go"
+              onClick={() => {
+                setMem(true);
+                const v = mkState();
+                setSt(v);
+                setSel(v.airId!);
+              }}
+            >
+              Continue without saving
+            </button>
+          </div>
+        ) : (
+          "Loading…"
+        )}
       </div>
     );
 
@@ -229,6 +311,7 @@ export default function Control() {
     setSt((s) => {
       const d = structuredClone(s!);
       f(d);
+      d.rev = s!.rev + 1;
       return d;
     });
   const p = st.pages.find((x) => x.id === sel) || st.pages[0];
@@ -249,7 +332,31 @@ export default function Control() {
       (PP(d).scene.layout[id] as any)[k] = v;
     });
   const airIdx = st.pages.findIndex((x) => x.id === st.airId);
+  const shown = st.pages.filter((x) => x.kind !== "bracket"); // numbered pages (matches' breaks)
+  const bp = st.pages.find((x) => x.kind === "bracket"); // the bracket screen (own section)
+  const airPage = st.pages[airIdx];
+  const lbl = (x: Page) =>
+    x.kind === "bracket"
+      ? "🏆 " + x.name
+      : `${shown.indexOf(x) + 1}. ${x.name}`;
+  const lab = (id: string) =>
+    (p.kind === "bracket"
+      ? (
+          {
+            btitle: "Title",
+            board: "Bracket (X,Y = top-left · Size = text · Height)",
+          } as Record<string, string>
+        )[id]
+      : undefined) ||
+    L[id] ||
+    id;
   const onAir = p.id === st.airId;
+  // The bracket screen only gets bracket tools; normal pages never see the bracket tab
+  const tabs: ("page" | "match" | "bracket" | "layout" | "look")[] =
+    p.kind === "bracket"
+      ? ["bracket", "layout", "look"]
+      : ["page", "match", "layout", "look"];
+  const tb = tabs.includes(tab) ? tab : tabs[0];
 
   const run = !!sc.cd.endsAt && sc.cd.endsAt > now;
   const act = (a: string, v = 0) =>
@@ -288,10 +395,9 @@ export default function Control() {
       const m = d.matches.find((x) => x.id === d.curId) || d.matches[0];
       m[t].score = Math.max(0, m[t].score + n);
     });
-  const setT = (t: "a" | "b", f: (x: State["match"]["a"]) => void) =>
-    up((d) => f(EM(d)[t]));
+  const setT = (t: "a" | "b", f: (x: Team) => void) => up((d) => f(EM(d)[t]));
   const add = () => {
-    const np = mkPage("Break " + st.pages.length);
+    const np = mkPage("Break " + shown.length);
     up((d) => {
       d.pages.push(np);
     });
@@ -299,6 +405,8 @@ export default function Control() {
     setTab("page");
   };
   const dup = () => {
+    if (p.kind === "bracket")
+      return say("The bracket screen cannot be duplicated.");
     const id = Math.random().toString(36).slice(2, 9);
     up((d) => {
       const i = d.pages.findIndex((x) => x.id === p.id),
@@ -309,66 +417,91 @@ export default function Control() {
     });
     setSel(id);
   };
-  const del = () => {
-    if (st.pages.length < 2 || !confirm(`Delete "${p.name}"?`)) return;
-    const rest = st.pages.filter((x) => x.id !== p.id);
-    up((d) => {
-      d.pages = rest;
-      if (d.airId === p.id) d.airId = null;
+  const delP = (id: string) => {
+    const x = st.pages.find((y) => y.id === id);
+    if (!x) return;
+    if (x.kind === "bracket")
+      return say("The bracket screen cannot be deleted. Just do not show it.");
+    if (shown.length < 2) return say("You need at least one page.");
+    ask(`Delete page "${x.name}"?`, () => {
+      up((d) => {
+        d.pages = d.pages.filter((y) => y.id !== id);
+        if (d.airId === id) d.airId = null;
+      });
+      if (sel === id) setSel(shown.find((y) => y.id !== id)!.id);
     });
-    setSel(rest[0].id);
   };
   const move = (dir: number) =>
     up((d) => {
+      const ids = d.pages.filter((x) => x.kind !== "bracket").map((x) => x.id),
+        k = ids.indexOf(p.id) + dir;
+      if (k < 0 || k >= ids.length) return;
       const i = d.pages.findIndex((x) => x.id === p.id),
-        j = i + dir;
-      if (j < 0 || j >= d.pages.length) return;
+        j = d.pages.findIndex((x) => x.id === ids[k]);
       [d.pages[i], d.pages[j]] = [d.pages[j], d.pages[i]];
     });
   const apply = () => {
     const pr = pre === "Custom" ? st.custom : PRESETS[pre];
     if (!pr)
-      return alert(
+      return say(
         'No custom look saved yet. Style a page, then press "Save current look as Custom".',
       );
-    if (
-      tgt === "all" &&
-      !confirm(
-        "Apply this look to ALL pages? Texts, images and scores are kept; only the style changes.",
-      )
-    )
-      return;
-    const f = (s: Scene) => {
-      Object.assign(s.style, pr.style);
-      if (pr.layout) s.layout = structuredClone(pr.layout);
+    const run = () => {
+      const f = (s: Scene) => {
+        Object.assign(s.style, pr.style);
+        if (pr.layout) s.layout = structuredClone(pr.layout);
+      };
+      up((d) => {
+        if (tgt === "this") f(PP(d).scene);
+        else
+          d.pages
+            .filter((x) => x.kind !== "bracket")
+            .forEach((x) => f(x.scene));
+      });
     };
-    up((d) => {
-      if (tgt === "this") f(PP(d).scene);
-      else d.pages.forEach((x) => f(x.scene));
-    });
+    if (tgt === "all")
+      ask(
+        "Apply this look to ALL pages? Texts, images and scores are kept; only the style changes.",
+        run,
+      );
+    else run();
   };
   const exp = () => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(
       new Blob([JSON.stringify(st)], { type: "application/json" }),
     );
-    a.download = "scoreboard-config.json";
+    a.download = `tournament-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
   };
   const imp = async (f: File) => {
+    let v: State;
     try {
       const s = migrate(JSON.parse(await f.text()));
       if (!s?.pages?.length) throw 0;
-      setSt(s);
-      setSel(s.airId || s.pages[0].id);
+      v = s;
     } catch {
-      alert("That file is not a valid scoreboard configuration.");
+      return say("That file is not a valid scoreboard configuration.");
     }
+    ask(
+      "Loading a backup replaces ALL current tournament data (export one first if unsure). Continue?",
+      () => {
+        setSt({ ...v, rev: (stRef.current?.rev ?? 0) + 1 });
+        setSel(v.airId || v.pages[0].id);
+      },
+    );
   };
   const makeCur = (id: string) =>
     up((d) => {
       d.curId = id;
     });
+  // open a match in the normal editor (leaves the bracket screen if it was selected)
+  const editMatch = (id: string) => {
+    setMsel(id);
+    if (p.kind === "bracket")
+      setSel((shown.find((x) => x.id === st.airId) || shown[0]).id);
+    setTab("match");
+  };
   const addM = () => {
     const nm = mkMatch();
     nm.tour = cur.tour;
@@ -376,8 +509,7 @@ export default function Control() {
     up((d) => {
       d.matches.push(nm);
     });
-    setMsel(nm.id);
-    setTab("match");
+    editMatch(nm.id);
   };
   const dupM = () => {
     const id = Math.random().toString(36).slice(2, 9);
@@ -391,15 +523,29 @@ export default function Control() {
     });
     setMsel(id);
   };
-  const delM = () => {
-    if (st.matches.length < 2 || !confirm(`Delete match "${mname(em)}"?`))
-      return;
-    const rest = st.matches.filter((x) => x.id !== em.id);
-    up((d) => {
-      d.matches = rest;
-      if (d.curId === em.id) d.curId = rest[0].id;
-    });
-    setMsel(rest[0].id);
+  const delM = (id: string) => {
+    const m = st.matches.find((x) => x.id === id);
+    if (!m) return;
+    if (st.matches.length < 2)
+      return say(
+        "You need at least one match. Add another before deleting this one.",
+      );
+    const inBr = st.bracket?.rounds.some((r) =>
+      r.matches.some((b) => b.matchId === id),
+    );
+    ask(
+      `Delete match "${mname(m)}"?` +
+        (inBr
+          ? " It is used by the bracket, so that bracket slot will be empty until you pick another match."
+          : ""),
+      () => {
+        up((d) => {
+          d.matches = d.matches.filter((x) => x.id !== id);
+          if (d.curId === id) d.curId = d.matches[0].id;
+        });
+        if (msel === id) setMsel("");
+      },
+    );
   };
   const moveM = (dir: number) =>
     up((d) => {
@@ -417,15 +563,40 @@ export default function Control() {
 
   return (
     <div className="cp">
+      {dlg && (
+        <div className="dlg">
+          <div className="dlgbox">
+            <p>{dlg.msg}</p>
+            <div className="btns">
+              {dlg.yes ? (
+                <>
+                  <button
+                    className="danger"
+                    onClick={() => {
+                      const f = dlg.yes!;
+                      setDlg(null);
+                      f();
+                    }}
+                  >
+                    Yes
+                  </button>
+                  <button onClick={() => setDlg(null)}>Cancel</button>
+                </>
+              ) : (
+                <button className="go" onClick={() => setDlg(null)}>
+                  OK
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <div className="top">
         <b style={{ fontSize: 18 }}>SCOREBOARD CONTROL</b>
         <div className="onair">
-          {airIdx >= 0 ? (
+          {airPage ? (
             <>
-              🔴 ON OBS NOW:{" "}
-              <b>
-                {airIdx + 1}. {st.pages[airIdx].name}
-              </b>
+              🔴 ON OBS NOW: <b>{lbl(airPage)}</b>
             </>
           ) : (
             <>
@@ -434,6 +605,19 @@ export default function Control() {
           )}
         </div>
         <button onClick={() => air(null)}>Hide overlay (key 0)</button>
+        <span className="hint">
+          {saveErr ? (
+            <b style={{ color: "#ff6b6b" }}>⚠ NOT SAVED: {saveErr}</b>
+          ) : memOnly ? (
+            "⚠ memory only — not saving"
+          ) : st.rev > savedRev.current ? (
+            "⏳ saving…"
+          ) : saved ? (
+            `💾 Last saved ${saved.toLocaleTimeString()}`
+          ) : (
+            ""
+          )}
+        </span>
         <span style={{ flex: 1 }} />
         <span>
           Paste in OBS:{" "}
@@ -477,13 +661,16 @@ export default function Control() {
               </label>
               <button
                 className="danger"
-                onClick={() => {
-                  if (confirm("Reset EVERYTHING to defaults?")) {
-                    const v = mkState();
-                    setSt(v);
-                    setSel(v.airId!);
-                  }
-                }}
+                onClick={() =>
+                  ask(
+                    "Reset EVERYTHING to defaults? All matches, pages and images will be erased.",
+                    () => {
+                      const v = mkState();
+                      setSt({ ...v, rev: st.rev + 1 });
+                      setSel(v.airId!);
+                    },
+                  )
+                }
               >
                 Reset everything
               </button>
@@ -539,10 +726,7 @@ export default function Control() {
                   (x.id === em.id ? " sel" : "") +
                   (x.id === cur.id ? " cur" : "")
                 }
-                onClick={() => {
-                  setMsel(x.id);
-                  setTab("match");
-                }}
+                onClick={() => editMatch(x.id)}
               >
                 <b className="no">{i + 1}</b>
                 <div style={{ flex: 1 }}>
@@ -564,6 +748,16 @@ export default function Control() {
                     Make current
                   </button>
                 )}
+                <button
+                  className="danger"
+                  title="Delete this match"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    delM(x.id);
+                  }}
+                >
+                  ✕
+                </button>
               </div>
             ))}
           </div>
@@ -572,16 +766,13 @@ export default function Control() {
             <button onClick={dupM}>Duplicate</button>
             <button onClick={() => moveM(-1)}>↑</button>
             <button onClick={() => moveM(1)}>↓</button>
-            <button className="danger" onClick={delM}>
-              Delete
-            </button>
           </div>
           <h3>② YOUR PAGES</h3>
           <p className="hint">
             Click a page to edit it. Press <b>▶ Show</b> (or its number key) to
             put it on OBS.
           </p>
-          {st.pages.map((x, i) => (
+          {shown.map((x, i) => (
             <div
               key={x.id}
               className={
@@ -606,6 +797,16 @@ export default function Control() {
                   ▶ Show
                 </button>
               )}
+              <button
+                className="danger"
+                title="Delete this page"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  delP(x.id);
+                }}
+              >
+                ✕
+              </button>
             </div>
           ))}
           <div className="btns">
@@ -615,16 +816,55 @@ export default function Control() {
           <div className="btns">
             <button onClick={() => move(-1)}>↑ Up</button>
             <button onClick={() => move(1)}>↓ Down</button>
-            <button className="danger" onClick={del}>
-              Delete
-            </button>
           </div>
+
+          <h3>③ BRACKET SCREEN</h3>
+          <p className="hint">
+            Shows the tournament bracket on OBS. It has its own banner and
+            style, separate from matches and breaks. Build the bracket in the 🏆
+            Bracket tab.
+          </p>
+          {bp && (
+            <div
+              className={
+                "pg" +
+                (bp.id === p.id ? " sel" : "") +
+                (bp.id === st.airId ? " air" : "")
+              }
+              onClick={() => {
+                setSel(bp.id);
+                setTab("bracket");
+              }}
+            >
+              <b className="no">🏆</b>
+              <div style={{ flex: 1 }}>
+                {bp.name}
+                <br />
+                <small>
+                  {st.bracket
+                    ? `${st.bracket.rounds.length} rounds`
+                    : "no bracket created yet"}
+                </small>
+              </div>
+              {bp.id === st.airId ? (
+                <span className="tag">ON AIR</span>
+              ) : (
+                <button
+                  className="go"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    air(bp.id);
+                  }}
+                >
+                  ▶ Show
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         <div>
-          <h3>
-            ③ EDITING PAGE: {st.pages.indexOf(p) + 1}. {p.name}
-          </h3>
+          <h3>④ EDITING: {lbl(p)}</h3>
           <div className="btns">
             {onAir ? (
               <span className="tag">
@@ -637,16 +877,17 @@ export default function Control() {
             )}
           </div>
           <div className="btns">
-            {(["page", "match", "layout", "look"] as const).map((t) => (
+            {tabs.map((t) => (
               <button
                 key={t}
-                className={tab === t ? "on" : ""}
+                className={tb === t ? "on" : ""}
                 onClick={() => setTab(t)}
               >
                 {
                   {
                     page: "This page",
                     match: "Teams & match",
+                    bracket: "🏆 Bracket options",
                     layout: "Position & size",
                     look: "Colors & style",
                   }[t]
@@ -655,7 +896,7 @@ export default function Control() {
             ))}
           </div>
 
-          {tab === "page" && (
+          {tb === "page" && (
             <>
               <Txt
                 l="Page name"
@@ -799,7 +1040,7 @@ export default function Control() {
             </>
           )}
 
-          {tab === "match" && (
+          {tb === "match" && (
             <>
               {em.id !== cur.id ? (
                 <p className="hint">
@@ -883,7 +1124,51 @@ export default function Control() {
             </>
           )}
 
-          {tab === "layout" && (
+          {tb === "bracket" && (
+            <>
+              <Txt
+                l="Title on screen"
+                v={p.title}
+                set={(v) =>
+                  setP((x) => {
+                    x.title = v;
+                  })
+                }
+              />
+              <Chk
+                l="Show scores"
+                v={p.showBoard}
+                set={(v) =>
+                  setP((x) => {
+                    x.showBoard = v;
+                  })
+                }
+              />
+              <Img
+                l="Banner (only this screen)"
+                v={p.banner}
+                set={(v) =>
+                  setP((x) => {
+                    x.banner = v;
+                  })
+                }
+              />
+              <p className="hint">
+                This banner is used ONLY by the bracket screen — it never
+                affects matches or breaks.
+              </p>
+              <BracketPanel
+                st={st}
+                up={up}
+                onCur={makeCur}
+                onEdit={editMatch}
+                ask={ask}
+                say={say}
+              />
+            </>
+          )}
+
+          {tb === "layout" && (
             <>
               <p className="hint">
                 Each row moves/resizes ONE element. X = left→right, Y =
@@ -891,7 +1176,7 @@ export default function Control() {
               </p>
               {Object.entries(sc.layout).map(([id, e]) => (
                 <div className="row" key={id}>
-                  <b>{L[id] || id}</b>
+                  <b>{lab(id)}</b>
                   <Chk
                     l="show"
                     v={e.on !== false}
@@ -965,7 +1250,7 @@ export default function Control() {
             </>
           )}
 
-          {tab === "look" && (
+          {tb === "look" && (
             <>
               <h3>QUICK LOOKS</h3>
               <div className="btns">
@@ -1090,7 +1375,7 @@ export default function Control() {
         </div>
 
         <div style={{ position: "sticky", top: 0, alignSelf: "start" }}>
-          <h3>④ WHAT OBS SHOWS NOW</h3>
+          <h3>⑤ WHAT OBS SHOWS NOW</h3>
           <div className="pv">
             <iframe src="/#overlay" title="on air" />
           </div>
