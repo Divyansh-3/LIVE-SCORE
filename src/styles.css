@@ -461,3 +461,422 @@ body {
 .pg .danger {
   padding: 4px 8px;
 }
+
+/* =====================================================
+   TOURNAMENT BRACKET
+===================================================== */
+
+.bracket-panel {
+  width: 100%;
+  min-width: 0;
+}
+
+.bracket-create-box {
+  margin: 16px 0 22px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.bracket-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 20px 10px 30px;
+}
+
+/* =====================================================
+   MAIN HORIZONTAL BRACKET
+===================================================== */
+
+.bracket-board {
+  display: flex;
+  align-items: stretch;
+  gap: 54px;
+
+  min-width: max-content;
+  min-height: 500px;
+
+  padding: 30px 25px;
+}
+
+/* =====================================================
+   ROUND COLUMN
+===================================================== */
+
+.bracket-round {
+  position: relative;
+
+  width: 230px;
+  min-width: 230px;
+
+  display: flex;
+  flex-direction: column;
+
+  /*
+    This is what creates the
+    tournament-tree spacing.
+  */
+}
+
+/* =====================================================
+   ROUND TITLE
+===================================================== */
+
+.bracket-round-title {
+  width: 100%;
+
+  box-sizing: border-box;
+
+  margin-bottom: 24px;
+  padding: 9px 12px;
+
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+
+  background: rgba(255, 255, 255, 0.04);
+
+  color: #fff;
+
+  font-size: 13px;
+  font-weight: 700;
+
+  text-align: center;
+
+  outline: none;
+}
+
+.bracket-round-title:focus {
+  border-color: rgba(139, 92, 246, 0.8);
+}
+
+/* =====================================================
+   MATCH CONTAINER
+===================================================== */
+
+.bracket-round-matches {
+  flex: 1;
+
+  display: flex;
+  flex-direction: column;
+
+  /*
+    Each round gets equal vertical distribution.
+
+    Later rounds therefore naturally sit
+    between the previous round matches.
+  */
+  justify-content: space-around;
+
+  gap: 28px;
+}
+
+/* =====================================================
+   MATCH CARD
+===================================================== */
+
+.bracket-match-card {
+  position: relative;
+
+  width: 230px;
+
+  box-sizing: border-box;
+
+  padding: 0;
+
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+
+  background: #111827;
+
+  overflow: visible;
+
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.bracket-match-card:hover {
+  border-color: rgba(139, 92, 246, 0.6);
+
+  transform: translateY(-1px);
+}
+
+.bracket-match-card.current {
+  border-color: rgba(139, 92, 246, 0.9);
+
+  box-shadow:
+    0 0 0 1px rgba(139, 92, 246, 0.25),
+    0 8px 30px rgba(0, 0, 0, 0.25);
+}
+
+.bracket-match-card.done {
+  border-color: rgba(34, 197, 94, 0.5);
+}
+
+/* =====================================================
+   MATCH HEADER
+===================================================== */
+
+.bracket-match-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding: 8px 10px;
+
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+
+  background: rgba(255, 255, 255, 0.035);
+
+  font-size: 11px;
+}
+
+.bracket-match-header strong {
+  color: #c4b5fd;
+
+  letter-spacing: 0.5px;
+}
+
+/* =====================================================
+   DONE TAG
+===================================================== */
+
+.bracket-done {
+  padding: 3px 6px;
+
+  border-radius: 4px;
+
+  background: rgba(34, 197, 94, 0.15);
+
+  color: #4ade80;
+
+  font-size: 9px;
+  font-weight: 800;
+
+  letter-spacing: 0.5px;
+}
+
+/* =====================================================
+   TEAM ROW
+===================================================== */
+
+.bracket-team-row {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  min-height: 35px;
+
+  padding: 0 11px;
+
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+
+  color: #d1d5db;
+
+  font-size: 12px;
+}
+
+.bracket-team-row:last-of-type {
+  border-bottom: 0;
+}
+
+.bracket-team-row span {
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+
+  max-width: 175px;
+}
+
+.bracket-team-row strong {
+  min-width: 22px;
+
+  text-align: right;
+
+  color: #fff;
+}
+
+.bracket-team-row.winner {
+  background: rgba(34, 197, 94, 0.1);
+
+  color: #fff;
+}
+
+.bracket-team-row.winner strong {
+  color: #4ade80;
+}
+
+/* =====================================================
+   MATCH SELECT
+===================================================== */
+
+.bracket-match-card select {
+  width: calc(100% - 20px);
+
+  margin: 10px;
+
+  padding: 7px 8px;
+
+  border: 1px solid rgba(255, 255, 255, 0.08);
+
+  border-radius: 6px;
+
+  background: #0b1020;
+
+  color: #dbe4ff;
+
+  font-size: 10px;
+
+  outline: none;
+}
+
+.bracket-match-card select:focus {
+  border-color: rgba(139, 92, 246, 0.7);
+}
+
+/* =====================================================
+   ACTION BUTTONS
+===================================================== */
+
+.bracket-actions {
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 5px;
+
+  padding: 0 10px 10px;
+}
+
+.bracket-actions button {
+  flex: 1;
+
+  min-width: 70px;
+
+  padding: 6px 7px;
+
+  border: 1px solid rgba(255, 255, 255, 0.08);
+
+  border-radius: 5px;
+
+  background: rgba(255, 255, 255, 0.04);
+
+  color: #cbd5e1;
+
+  cursor: pointer;
+
+  font-size: 10px;
+}
+
+.bracket-actions button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.bracket-actions .go {
+  background: rgba(139, 92, 246, 0.15);
+
+  border-color: rgba(139, 92, 246, 0.35);
+
+  color: #c4b5fd;
+}
+
+/* =====================================================
+   BRACKET CONNECTING LINES
+
+   The first round is on the LEFT.
+   Later rounds move RIGHT.
+
+   These lines visually connect
+   matches in the tournament tree.
+===================================================== */
+
+.bracket-round:not(:last-child)
+  .bracket-match-card::after {
+  content: "";
+
+  position: absolute;
+
+  right: -55px;
+
+  top: 50%;
+
+  width: 54px;
+
+  height: 1px;
+
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/*
+  Small vertical connector in the gap
+  between two matches.
+*/
+
+.bracket-round:not(:first-child)
+  .bracket-match-card::before {
+  content: "";
+
+  position: absolute;
+
+  left: -28px;
+
+  top: 50%;
+
+  width: 28px;
+
+  height: 1px;
+
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* =====================================================
+   BOTTOM ACTIONS
+===================================================== */
+
+.bracket-bottom-actions {
+  margin-top: 20px;
+}
+
+.bracket-bottom-actions .danger {
+  display: inline-flex;
+
+  flex-direction: column;
+
+  gap: 2px;
+}
+
+.bracket-bottom-actions .small {
+  opacity: 0.65;
+
+  font-size: 9px;
+}
+
+/* =====================================================
+   MOBILE / SMALL SCREEN
+===================================================== */
+
+@media (max-width: 900px) {
+  .bracket-board {
+    gap: 35px;
+
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .bracket-round,
+  .bracket-match-card {
+    width: 210px;
+    min-width: 210px;
+  }
+
+  .bracket-team-row span {
+    max-width: 150px;
+  }
+}

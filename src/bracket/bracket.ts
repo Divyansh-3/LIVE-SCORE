@@ -11,6 +11,44 @@ import {
 
 const NEED = { BO1: 1, BO3: 2, BO5: 3 }; // wins needed to take the series
 
+export const STAGES = [
+  "Round of 32",
+  "Round of 16",
+  "Quarter Final",
+  "Semi Final",
+  "Final",
+  "Third Place",
+  "Group Stage",
+];
+const RANK: Record<string, number> = {
+  "group stage": -1,
+  "round of 32": 0,
+  "round of 16": 1,
+  "quarter final": 2,
+  "semi final": 3,
+  final: 4,
+  "third place": 5,
+};
+
+/** Groups matches by their stage tag, ordered Round of 32 → … → Final. Matches without a tag are ignored. */
+export function stageColumns(
+  ms: Match[],
+): { name: string; matches: Match[] }[] {
+  const cols = new Map<
+    string,
+    { name: string; matches: Match[]; rank: number }
+  >();
+  for (const m of ms) {
+    const name = (m.stage || "").trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (!cols.has(key))
+      cols.set(key, { name, matches: [], rank: RANK[key] ?? 10 + cols.size });
+    cols.get(key)!.matches.push(m);
+  }
+  return [...cols.values()].sort((a, b) => a.rank - b.rank);
+}
+
 export const roundName = (r: number, total: number) =>
   r === total - 1
     ? "Final"
@@ -41,7 +79,8 @@ export function createBracket(
     const ms: BracketMatch[] = [];
     for (let i = 0; i < size / 2 ** (r + 1); i++) {
       const m = mkMatch();
-      m.tour = `${tour} // ${name.toUpperCase()}`;
+      m.tour = tour;
+      m.stage = name;
       if (r === 0) {
         m.a.name = `TEAM ${2 * i + 1}`;
         m.b.name = `TEAM ${2 * i + 2}`;
@@ -66,6 +105,56 @@ export function createBracket(
     if (r < total - 1)
       rd.matches.forEach((bm, i) => {
         bm.nextMatchId = rounds[r + 1].matches[i >> 1].id;
+      });
+  });
+  return { bracket: { format: "single-elimination", rounds }, matches };
+}
+
+/**
+ * Creates a bracket from n NEW best-of-3 matches.
+ * Rounds are sized from the end (1, 2, 4, 8 ...). Any leftover matches become their own first round.
+ */
+export function createBracketN(
+  n: number,
+  tour: string,
+): { bracket: Bracket; matches: Match[] } {
+  const sizes: number[] = [];
+  let left = n;
+  let c = 1;
+  while (left >= c) {
+    sizes.unshift(c);
+    left -= c;
+    c *= 2;
+  }
+  if (left > 0) sizes.unshift(left);
+
+  const rounds: Bracket["rounds"] = [];
+  const matches: Match[] = [];
+  sizes.forEach((count, r) => {
+    const name = roundName(r, sizes.length);
+    const ms: BracketMatch[] = [];
+    for (let i = 0; i < count; i++) {
+      const m = mkMatch();
+      m.tour = tour;
+      m.stage = name;
+      m.fmt = "BO3";
+      matches.push(m);
+      ms.push({
+        id: uid(),
+        matchId: m.id,
+        nextMatchId: null,
+        completed: false,
+        label: label(name, r, i),
+      });
+    }
+    rounds.push({ id: uid(), name, matches: ms });
+  });
+  // link winners forward only where the next round is exactly half the size
+  rounds.forEach((rd, r) => {
+    const nx = rounds[r + 1];
+    if (nx && nx.matches.length * 2 === rd.matches.length)
+      rd.matches.forEach((bm, i) => {
+        bm.nextMatchId = nx.matches[i >> 1].id;
       });
   });
   return { bracket: { format: "single-elimination", rounds }, matches };
