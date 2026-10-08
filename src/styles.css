@@ -1,10 +1,3 @@
-/* =====================================================================
-   styles.css
-   1. Base                – shared reset, transparent page
-   2. OBS overlay         – everything OBS shows (Overlay.tsx)
-   3. Control panel       – the page you use in your browser (Control.tsx)
-   ===================================================================== */
-
 
 /* ---------------------------------------------------------------------
    1. BASE
@@ -12,13 +5,12 @@
 html,
 body {
   margin: 0;
-  background: transparent;          /* keeps OBS see-through */
+  background: transparent; /* keeps OBS see-through */
 }
 
 * {
   box-sizing: border-box;
 }
-
 
 /* ---------------------------------------------------------------------
    2. OBS OVERLAY
@@ -72,7 +64,8 @@ body {
   padding: 0.3em 0.8em;
 }
 
-.vs {                               /* the score between the two names */
+.vs {
+  /* the score between the two names */
   font-size: 1em;
   padding: 0 0.3em;
 }
@@ -87,14 +80,29 @@ body {
 }
 
 /* --- Animations --- */
-.pop {                              /* score changes */
+.pop {
+  /* score changes */
   display: inline-block;
   animation: pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1);
 }
 
-@keyframes fade  { from { opacity: 0; transform: translateY(14px); } }
-@keyframes pop   { from { transform: scale(1.55); filter: brightness(2.2); } }
-@keyframes blink { to   { opacity: 0.3; } }       /* countdown reaches 00:00 */
+@keyframes fade {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+@keyframes pop {
+  from {
+    transform: scale(1.55);
+    filter: brightness(2.2);
+  }
+}
+@keyframes blink {
+  to {
+    opacity: 0.3;
+  }
+} /* countdown reaches 00:00 */
 
 /* "Animations" switch turned off in the control panel */
 .noanim,
@@ -103,26 +111,28 @@ body {
   transition: none !important;
 }
 
-
 /* ---------------------------------------------------------------------
    3. CONTROL PANEL
    --------------------------------------------------------------------- */
 .cp {
-  --bg:      #0b0f19;               /* page background */
-  --surface: #111827;               /* inputs, popups */
-  --card:    #0e1526;               /* panels */
-  --line:    #1f2a48;               /* thin borders */
-  --line-hi: #2b3a63;               /* input / button borders */
-  --text:    #dfe6f3;
-  --muted:   #7f8fb0;
-  --accent:  #00e5ff;               /* cyan highlight */
-  --green:   #12b76a;               /* main action buttons */
-  --red:     #ff3d6e;               /* ON AIR */
-  --amber:   #ffb020;               /* CURRENT match */
+  --bg: #0b0f19; /* page background */
+  --surface: #111827; /* inputs, popups */
+  --card: #0e1526; /* panels */
+  --line: #1f2a48; /* thin borders */
+  --line-hi: #2b3a63; /* input / button borders */
+  --text: #dfe6f3;
+  --muted: #7f8fb0;
+  --accent: #00e5ff; /* cyan highlight */
+  --green: #12b76a; /* main action buttons */
+  --red: #ff3d6e; /* ON AIR */
+  --amber: #ffb020; /* CURRENT match */
 
   background: var(--bg);
   color: var(--text);
-  font: 15px "Segoe UI", Arial, sans-serif;
+  font:
+    15px "Segoe UI",
+    Arial,
+    sans-serif;
   height: 100vh;
   overflow: auto;
   padding: 12px;
@@ -152,10 +162,24 @@ body {
   padding: 5px 10px;
   cursor: pointer;
 }
-.cp button:hover      { background: #22305a; }
-.cp button.on         { background: var(--accent); border-color: var(--accent); color: #001018; }  /* selected tab */
-.cp button.danger     { border-color: #aa3333; }
-.cp button.go         { background: var(--green); border-color: var(--green); color: #001a0d; font-weight: 700; padding: 7px 12px; }  /* main action */
+.cp button:hover {
+  background: #22305a;
+}
+.cp button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #001018;
+} /* selected tab */
+.cp button.danger {
+  border-color: #aa3333;
+}
+.cp button.go {
+  background: var(--green);
+  border-color: var(--green);
+  color: #001a0d;
+  font-weight: 700;
+  padding: 7px 12px;
+} /* main action */
 
 /* --- Inputs --- */
 .cp input,
@@ -167,8 +191,14 @@ body {
   border: 1px solid var(--line-hi);
   border-radius: 4px;
 }
-.cp input[type=number] { width: 70px; }
-.cp input[type=color]  { width: 40px; height: 26px; padding: 0; }
+.cp input[type="number"] {
+  width: 70px;
+}
+.cp input[type="color"] {
+  width: 40px;
+  height: 26px;
+  padding: 0;
+}
 
 /* --- Form rows --- */
 .num,
@@ -179,17 +209,24 @@ body {
   margin: 3px 0;
 }
 .num > span,
-.txt > span { min-width: 92px; color: #9fb0d0; }   /* label */
-.txt input  { flex: 1; }
+.txt > span {
+  min-width: 92px;
+  color: #9fb0d0;
+} /* label */
+.txt input {
+  flex: 1;
+}
 
-.btns {                             /* a row of buttons */
+.btns {
+  /* a row of buttons */
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin: 4px 0;
 }
 
-.row {                              /* one line in "Position & size" */
+.row {
+  /* one line in "Position & size" */
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -197,9 +234,13 @@ body {
   padding: 5px 0;
   border-bottom: 1px solid #151d33;
 }
-.row > b { width: 140px; font-weight: 600; }
+.row > b {
+  width: 140px;
+  font-weight: 600;
+}
 
-.box {                              /* framed group, e.g. one team */
+.box {
+  /* framed group, e.g. one team */
   margin: 8px 0;
   padding: 4px 10px;
   border: 1px solid var(--line);
@@ -216,14 +257,17 @@ body {
   border-bottom: 1px solid var(--line);
 }
 
-.onair {                            /* "ON OBS NOW: …" */
+.onair {
+  /* "ON OBS NOW: …" */
   padding: 6px 12px;
   border: 1px solid var(--line-hi);
   border-radius: 4px;
   background: #101a30;
 }
 
-.menu { position: relative; }       /* ⚙ Backup & settings dropdown */
+.menu {
+  position: relative;
+} /* ⚙ Backup & settings dropdown */
 .menu summary {
   padding: 5px 10px;
   border: 1px solid var(--line-hi);
@@ -254,9 +298,19 @@ body {
   border: 1px solid var(--line);
   border-radius: 6px;
 }
-.side      { display: flex; align-items: center; gap: 8px; }   /* one team's score controls */
-.nm        { min-width: 150px; font-weight: 600; }
-.bigscore  { width: 50px; font-size: 30px; }
+.side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+} /* one team's score controls */
+.nm {
+  min-width: 150px;
+  font-weight: 600;
+}
+.bigscore {
+  width: 50px;
+  font-size: 30px;
+}
 
 /* --- Three-column layout: lists | editor | previews --- */
 .grid {
@@ -267,7 +321,8 @@ body {
 }
 
 /* --- Match & page list cards --- */
-.mlist {                            /* scrollable match list */
+.mlist {
+  /* scrollable match list */
   max-height: 300px;
   padding-right: 4px;
   overflow: auto;
@@ -283,20 +338,38 @@ body {
   border-radius: 6px;
   cursor: pointer;
 }
-.pg .no    { width: 30px; text-align: center; font-size: 24px; color: var(--accent); }
-.pg small  { color: var(--muted); }
-.pg.sel    { border-color: var(--accent); background: #101a30; }          /* being edited */
-.pg.air    { box-shadow: 0 0 0 2px var(--red)   inset; }                  /* page on OBS */
-.pg.cur    { box-shadow: 0 0 0 2px var(--amber) inset; }                  /* current match */
+.pg .no {
+  width: 30px;
+  text-align: center;
+  font-size: 24px;
+  color: var(--accent);
+}
+.pg small {
+  color: var(--muted);
+}
+.pg.sel {
+  border-color: var(--accent);
+  background: #101a30;
+} /* being edited */
+.pg.air {
+  box-shadow: 0 0 0 2px var(--red) inset;
+} /* page on OBS */
+.pg.cur {
+  box-shadow: 0 0 0 2px var(--amber) inset;
+} /* current match */
 
-.tag {                              /* ON AIR / CURRENT badge */
+.tag {
+  /* ON AIR / CURRENT badge */
   padding: 1px 5px;
   font-size: 10px;
   color: #fff;
   background: var(--red);
   border-radius: 3px;
 }
-.tag.n { color: #000; background: var(--amber); }
+.tag.n {
+  color: #000;
+  background: var(--amber);
+}
 
 /* --- Countdown readout --- */
 .big {
@@ -314,7 +387,7 @@ body {
   margin-bottom: 6px;
   overflow: hidden;
   border: 1px solid var(--line-hi);
-  background: repeating-conic-gradient(#222 0 25%, #333 0 50%) 0 0 / 20px 20px;   /* checkerboard = transparent */
+  background: repeating-conic-gradient(#222 0 25%, #333 0 50%) 0 0 / 20px 20px; /* checkerboard = transparent */
 }
 .pv iframe {
   width: 1920px;
