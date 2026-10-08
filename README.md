@@ -37,13 +37,14 @@ The project provides a separate control panel for managing teams, scores, match 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/Divyansh-3/LIVE_SCORE.git
+git clone https://github.com/Divyansh-3/LIVE-SCORE.git
 ```
 
 ### 2. Enter the project directory
 
 ```bash
 cd LIVE-SCORE
+cd src
 ```
 
 ### 3. Install dependencies
