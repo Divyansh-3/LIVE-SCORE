@@ -1,14 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import BracketPanel from "./bracket/BracketPanel";
+import TablePanel from "./table/TablePanel";
+import { champion } from "./table/table";
+import { STAGES } from "./bracket/bracket";
 import { loadOrInit, saveState } from "./storage/db";
 import { closePublisher, publish, subscribe } from "./storage/sync";
 import {
   PRESETS,
   cdLeft,
   fmtT,
+  mkBannerPage,
+  mkBracketPage,
+  mkTablePage,
   mkMatch,
   mkPage,
   mkState,
+  uid,
   migrate,
   useNow,
   type Match,
@@ -184,7 +191,7 @@ export default function Control() {
   const [st, setSt] = useState<State | null>(null);
   const [sel, setSel] = useState("");
   const [tab, setTab] = useState<
-    "page" | "match" | "bracket" | "layout" | "look"
+    "page" | "match" | "bracket" | "table" | "layout" | "look"
   >("page");
   const [pre, setPre] = useState("Modern"),
     [tgt, setTgt] = useState("this"),
@@ -270,7 +277,9 @@ export default function Control() {
       )
         return;
       if (e.key === "0") air(null);
-      const list = st.pages.filter((x) => x.kind !== "bracket"),
+      const list = st.pages.filter(
+          (x) => x.kind !== "bracket" && x.kind !== "table",
+        ),
         i = +e.key;
       if (i >= 1 && list[i - 1]) air(list[i - 1].id);
     };
@@ -327,24 +336,43 @@ export default function Control() {
     up((d) => {
       PP(d).scene.style[k] = v;
     });
-  const el = (id: string, k: "x" | "y" | "s" | "h", v: number) =>
+  const el = (id: string, k: "x" | "y" | "s" | "h" | "w", v: number) =>
     up((d) => {
       (PP(d).scene.layout[id] as any)[k] = v;
     });
+  // Shift the bracket left/right/up/down (or centre it) WITHOUT changing its size
+  const shift = (id: string, dx: number, dy: number, centre = false) =>
+    up((d) => {
+      const l = PP(d).scene.layout[id];
+      if (l.w === undefined) l.w = 1920 - 2 * l.x;
+      if (centre) l.x = Math.round((1920 - l.w) / 2);
+      else {
+        l.x += dx;
+        l.y += dy;
+      }
+    });
   const airIdx = st.pages.findIndex((x) => x.id === st.airId);
-  const shown = st.pages.filter((x) => x.kind !== "bracket"); // numbered pages (matches' breaks)
-  const bp = st.pages.find((x) => x.kind === "bracket"); // the bracket screen (own section)
+  const shown = st.pages.filter(
+    (x) => x.kind !== "bracket" && x.kind !== "table",
+  ); // numbered pages (matches' breaks)
+  const tbs = st.pages.filter((x) => x.kind === "table"); // the table screens (own section)
+  const bps = st.pages.filter((x) => x.kind === "bracket"); // the bracket screens (own section)
   const airPage = st.pages[airIdx];
   const lbl = (x: Page) =>
     x.kind === "bracket"
       ? "🏆 " + x.name
-      : `${shown.indexOf(x) + 1}. ${x.name}`;
+      : x.kind === "table"
+        ? "📊 " + x.name
+        : `${shown.indexOf(x) + 1}. ${x.name}`;
   const lab = (id: string) =>
-    (p.kind === "bracket"
+    (p.kind === "bracket" || p.kind === "table"
       ? (
           {
             btitle: "Title",
-            board: "Bracket (X,Y = top-left · Size = text · Height)",
+            board:
+              p.kind === "table"
+                ? "Table (X,Y = top-left · Size = largest text · Width/Height)"
+                : "Bracket (X,Y = top-left · Size = text · Width/Height)",
           } as Record<string, string>
         )[id]
       : undefined) ||
@@ -352,10 +380,14 @@ export default function Control() {
     id;
   const onAir = p.id === st.airId;
   // The bracket screen only gets bracket tools; normal pages never see the bracket tab
-  const tabs: ("page" | "match" | "bracket" | "layout" | "look")[] =
+  const tabs: ("page" | "match" | "bracket" | "table" | "layout" | "look")[] =
     p.kind === "bracket"
       ? ["bracket", "layout", "look"]
-      : ["page", "match", "layout", "look"];
+      : p.kind === "table"
+        ? ["table", "layout", "look"]
+        : p.kind === "banner"
+          ? ["page", "layout"]
+          : ["page", "match", "layout", "look"];
   const tb = tabs.includes(tab) ? tab : tabs[0];
 
   const run = !!sc.cd.endsAt && sc.cd.endsAt > now;
@@ -404,6 +436,44 @@ export default function Control() {
     setSel(np.id);
     setTab("page");
   };
+  const addBanner = () => {
+    const np = mkBannerPage(
+      "Banner " + (shown.filter((x) => x.kind === "banner").length + 1),
+    );
+    up((d) => {
+      d.pages.push(np);
+    });
+    setSel(np.id);
+    setTab("page");
+  };
+  const addBracket = () => {
+    const np = mkBracketPage(uid(), "Bracket " + (bps.length + 1));
+    up((d) => {
+      d.pages.push(np);
+    });
+    setSel(np.id);
+    setTab("bracket");
+  };
+  const addTable = () => {
+    const np = mkTablePage("Table " + (tbs.length + 1));
+    up((d) => {
+      d.pages.push(np);
+    });
+    setSel(np.id);
+    setTab("table");
+  };
+  const dupTable = (id: string) => {
+    const nid = uid();
+    up((d) => {
+      const i = d.pages.findIndex((x) => x.id === id),
+        c = structuredClone(d.pages[i]);
+      c.id = nid;
+      c.name += " copy";
+      d.pages.splice(i + 1, 0, c);
+    });
+    setSel(nid);
+    setTab("table");
+  };
   const dup = () => {
     if (p.kind === "bracket")
       return say("The bracket screen cannot be duplicated.");
@@ -420,20 +490,27 @@ export default function Control() {
   const delP = (id: string) => {
     const x = st.pages.find((y) => y.id === id);
     if (!x) return;
-    if (x.kind === "bracket")
-      return say("The bracket screen cannot be deleted. Just do not show it.");
-    if (shown.length < 2) return say("You need at least one page.");
-    ask(`Delete page "${x.name}"?`, () => {
+    if (x.kind === "bracket" && bps.length < 2)
+      return say("You need at least one bracket screen. Just do not show it.");
+    if (x.kind !== "bracket" && x.kind !== "table" && shown.length < 2)
+      return say("You need at least one page.");
+    ask(`Delete "${x.name}"?`, () => {
       up((d) => {
         d.pages = d.pages.filter((y) => y.id !== id);
         if (d.airId === id) d.airId = null;
       });
-      if (sel === id) setSel(shown.find((y) => y.id !== id)!.id);
+      if (sel === id)
+        setSel(
+          (shown.find((y) => y.id !== id) ?? st.pages.find((y) => y.id !== id)!)
+            .id,
+        );
     });
   };
   const move = (dir: number) =>
     up((d) => {
-      const ids = d.pages.filter((x) => x.kind !== "bracket").map((x) => x.id),
+      const ids = d.pages
+          .filter((x) => x.kind !== "bracket" && x.kind !== "table")
+          .map((x) => x.id),
         k = ids.indexOf(p.id) + dir;
       if (k < 0 || k >= ids.length) return;
       const i = d.pages.findIndex((x) => x.id === p.id),
@@ -453,10 +530,7 @@ export default function Control() {
       };
       up((d) => {
         if (tgt === "this") f(PP(d).scene);
-        else
-          d.pages
-            .filter((x) => x.kind !== "bracket")
-            .forEach((x) => f(x.scene));
+        else d.pages.filter((x) => !x.kind).forEach((x) => f(x.scene));
       });
     };
     if (tgt === "all")
@@ -530,8 +604,8 @@ export default function Control() {
       return say(
         "You need at least one match. Add another before deleting this one.",
       );
-    const inBr = st.bracket?.rounds.some((r) =>
-      r.matches.some((b) => b.matchId === id),
+    const inBr = st.pages.some((pg) =>
+      pg.bracket?.rounds.some((r) => r.matches.some((b) => b.matchId === id)),
     );
     ask(
       `Delete match "${mname(m)}"?` +
@@ -732,6 +806,7 @@ export default function Control() {
                 <div style={{ flex: 1 }}>
                   <div>{mname(x)}</div>
                   <small>
+                    {x.stage ? x.stage + " · " : ""}
                     {x.fmt} · {x.a.score} – {x.b.score}
                   </small>
                 </div>
@@ -811,6 +886,12 @@ export default function Control() {
           ))}
           <div className="btns">
             <button onClick={add}>+ New page</button>
+            <button
+              onClick={addBanner}
+              title="A page with only an image – no text at all"
+            >
+              + New banner page
+            </button>
             <button onClick={dup}>Duplicate</button>
           </div>
           <div className="btns">
@@ -818,14 +899,15 @@ export default function Control() {
             <button onClick={() => move(1)}>↓ Down</button>
           </div>
 
-          <h3>③ BRACKET SCREEN</h3>
+          <h3>③ BRACKET SCREENS</h3>
           <p className="hint">
-            Shows the tournament bracket on OBS. It has its own banner and
-            style, separate from matches and breaks. Build the bracket in the 🏆
-            Bracket tab.
+            Each bracket screen shows its own bracket on OBS, with its own
+            banner and style. Add as many as you need (Upper bracket, Lower
+            bracket, Group A…).
           </p>
-          {bp && (
+          {bps.map((bp) => (
             <div
+              key={bp.id}
               className={
                 "pg" +
                 (bp.id === p.id ? " sel" : "") +
@@ -837,13 +919,12 @@ export default function Control() {
               }}
             >
               <b className="no">🏆</b>
-              <div style={{ flex: 1 }}>
+              <div>
                 {bp.name}
-                <br />
                 <small>
-                  {st.bracket
-                    ? `${st.bracket.rounds.length} rounds`
-                    : "no bracket created yet"}
+                  {bp.bracket
+                    ? `${bp.bracket.rounds.length} round(s)`
+                    : "no bracket yet"}
                 </small>
               </div>
               {bp.id === st.airId ? (
@@ -859,8 +940,100 @@ export default function Control() {
                   ▶ Show
                 </button>
               )}
+              <button
+                className="danger"
+                title="Delete this bracket screen"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  delP(bp.id);
+                }}
+              >
+                ✕
+              </button>
             </div>
-          )}
+          ))}
+          <div className="btns">
+            <button className="go" onClick={addBracket}>
+              + New bracket
+            </button>
+          </div>
+
+          <h3>④ TABLES</h3>
+          <p className="hint">
+            Each table has its own teams, fixtures, results and champion, and is
+            shown on OBS as its own screen. Add as many as you need (Group A,
+            Group B, Finals…).
+          </p>
+          {tbs.map((tp) => {
+            const T = tp.table,
+              ch = T ? champion(T) : null,
+              dn = T
+                ? T.matches.filter((m) => m.sa !== null && m.sb !== null).length
+                : 0;
+            return (
+              <div
+                key={tp.id}
+                className={
+                  "pg" +
+                  (tp.id === p.id ? " sel" : "") +
+                  (tp.id === st.airId ? " air" : "")
+                }
+                onClick={() => {
+                  setSel(tp.id);
+                  setTab("table");
+                }}
+              >
+                <b className="no">📊</b>
+                <div>
+                  {tp.name}
+                  <small>
+                    {T
+                      ? ch
+                        ? `🏆 ${ch.name}`
+                        : `${T.teams.length} teams · ${dn}/${T.matches.length} played`
+                      : "not created yet"}
+                  </small>
+                </div>
+                {tp.id === st.airId ? (
+                  <span className="tag">ON AIR</span>
+                ) : (
+                  <button
+                    className="go"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      air(tp.id);
+                    }}
+                  >
+                    ▶ Show
+                  </button>
+                )}
+                <button
+                  title="Duplicate this table"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dupTable(tp.id);
+                  }}
+                >
+                  ⧉
+                </button>
+                <button
+                  className="danger"
+                  title="Delete this table"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    delP(tp.id);
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })}
+          <div className="btns">
+            <button className="go" onClick={addTable}>
+              + New table
+            </button>
+          </div>
         </div>
 
         <div>
@@ -888,6 +1061,7 @@ export default function Control() {
                     page: "This page",
                     match: "Teams & match",
                     bracket: "🏆 Bracket options",
+                    table: "📊 Table options",
                     layout: "Position & size",
                     look: "Colors & style",
                   }[t]
@@ -896,7 +1070,48 @@ export default function Control() {
             ))}
           </div>
 
-          {tb === "page" && (
+          {tb === "page" && p.kind === "banner" && (
+            <>
+              <Txt
+                l="Page name"
+                v={p.name}
+                set={(v) =>
+                  setP((x) => {
+                    x.name = v;
+                  })
+                }
+              />
+              <Img
+                l="Banner image"
+                v={p.banner}
+                set={(v) =>
+                  setP((x) => {
+                    x.banner = v;
+                  })
+                }
+              />
+              <div className="txt">
+                <span>Image fit</span>
+                <select
+                  value={p.fit || "cover"}
+                  onChange={(e) =>
+                    setP((x) => {
+                      x.fit = e.target.value as "cover" | "contain";
+                    })
+                  }
+                >
+                  <option value="cover">Fill the screen (may crop)</option>
+                  <option value="contain">Show the whole image</option>
+                </select>
+              </div>
+              <p className="hint">
+                This page shows ONLY the image — no title, countdown, scoreboard
+                or other text. The image belongs to this page alone. Use
+                “Position &amp; size” to move or resize it.
+              </p>
+            </>
+          )}
+          {tb === "page" && p.kind !== "banner" && (
             <>
               <Txt
                 l="Page name"
@@ -1079,6 +1294,24 @@ export default function Control() {
                   <option>BO5</option>
                 </select>
               </div>
+              <div className="txt">
+                <span>Stage tag</span>
+                <input
+                  list="stages"
+                  placeholder="e.g. Semi Final"
+                  value={em.stage || ""}
+                  onChange={(e) =>
+                    up((d) => {
+                      EM(d).stage = e.target.value;
+                    })
+                  }
+                />
+                <datalist id="stages">
+                  {STAGES.map((s) => (
+                    <option key={s} value={s} />
+                  ))}
+                </datalist>
+              </div>
               <Img
                 l="Banner for THIS match"
                 v={em.banner || ""}
@@ -1127,6 +1360,15 @@ export default function Control() {
           {tb === "bracket" && (
             <>
               <Txt
+                l="Screen name"
+                v={p.name}
+                set={(v) =>
+                  setP((x) => {
+                    x.name = v;
+                  })
+                }
+              />
+              <Txt
                 l="Title on screen"
                 v={p.title}
                 set={(v) =>
@@ -1159,12 +1401,50 @@ export default function Control() {
               </p>
               <BracketPanel
                 st={st}
+                pid={p.id}
                 up={up}
                 onCur={makeCur}
                 onEdit={editMatch}
                 ask={ask}
                 say={say}
               />
+            </>
+          )}
+
+          {tb === "table" && (
+            <>
+              <Txt
+                l="Screen name"
+                v={p.name}
+                set={(v) =>
+                  setP((x) => {
+                    x.name = v;
+                  })
+                }
+              />
+              <Txt
+                l="Title on screen"
+                v={p.title}
+                set={(v) =>
+                  setP((x) => {
+                    x.title = v;
+                  })
+                }
+              />
+              <Img
+                l="Banner (only this screen)"
+                v={p.banner}
+                set={(v) =>
+                  setP((x) => {
+                    x.banner = v;
+                  })
+                }
+              />
+              <p className="hint">
+                This banner is used ONLY by this table screen. Use “Position
+                &amp; size” to move or resize the table.
+              </p>
+              <TablePanel st={st} pid={p.id} up={up} ask={ask} say={say} />
             </>
           )}
 
@@ -1186,7 +1466,23 @@ export default function Control() {
                       })
                     }
                   />
-                  <Num l="X" v={e.x} step={10} set={(v) => el(id, "x", v)} />
+                  <Num
+                    l="X"
+                    v={e.x}
+                    step={10}
+                    set={(v) =>
+                      up((d) => {
+                        const l = PP(d).scene.layout[id];
+                        if (
+                          (p.kind === "bracket" || p.kind === "table") &&
+                          id === "board" &&
+                          l.w === undefined
+                        )
+                          l.w = 1920 - 2 * l.x;
+                        l.x = v;
+                      })
+                    }
+                  />
                   <Num l="Y" v={e.y} step={10} set={(v) => el(id, "y", v)} />
                   <Num
                     l={id === "banner" ? "Width" : "Size"}
@@ -1204,6 +1500,36 @@ export default function Control() {
                       set={(v) => el(id, "h", v)}
                     />
                   )}
+                  {(p.kind === "bracket" || p.kind === "table") &&
+                    id === "board" && (
+                      <Num
+                        l="Width"
+                        v={e.w ?? 1920 - 2 * e.x}
+                        step={20}
+                        min={200}
+                        set={(v) => el(id, "w", v)}
+                      />
+                    )}
+                  {(p.kind === "bracket" || p.kind === "table") &&
+                    id === "board" && (
+                      <div className="btns" style={{ width: "100%" }}>
+                        <b style={{ width: "auto" }}>Shift:</b>
+                        <button onClick={() => shift(id, -50, 0)}>
+                          ⏪ −50
+                        </button>
+                        <button onClick={() => shift(id, -10, 0)}>◀ −10</button>
+                        <button onClick={() => shift(id, 10, 0)}>+10 ▶</button>
+                        <button onClick={() => shift(id, 50, 0)}>+50 ⏩</button>
+                        <button onClick={() => shift(id, 0, -10)}>▲ up</button>
+                        <button onClick={() => shift(id, 0, 10)}>▼ down</button>
+                        <button
+                          className="go"
+                          onClick={() => shift(id, 0, 0, true)}
+                        >
+                          Center
+                        </button>
+                      </div>
+                    )}
                 </div>
               ))}
               <h3>BACKGROUND IMAGE</h3>

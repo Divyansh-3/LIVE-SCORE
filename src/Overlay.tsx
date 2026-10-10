@@ -1,7 +1,8 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { cdLeft, fmtT, rgba, useNow, type Style } from "./model";
+import { cdLeft, fmtT, rgba, useNow, type Match, type Style } from "./model";
 import { useSharedState } from "./storage/sync";
-import { winnerOf } from "./bracket/bracket";
+import { stageColumns, winnerOf } from "./bracket/bracket";
+import { isComplete, standings } from "./table/table";
 
 const CENTER = new Set(["btitle", "bsub", "cd", "board", "binfo"]);
 const FMT = { BO1: "BEST OF 1", BO3: "BEST OF 3", BO5: "BEST OF 5" };
@@ -103,25 +104,72 @@ export default function Overlay() {
     opacity: s.opacity,
     "--accent": s.accent,
   } as CSSProperties;
-  const bn = p.kind === "bracket" ? p.banner : mt.banner || p.banner; // the bracket screen has its OWN banner
+  const bn = p.kind ? p.banner : mt.banner || p.banner; // bracket / banner / table screens use their OWN banner     // the bracket screen has its OWN banner
   const ls = (L.board?.s || 48) * 1.4;
   const blink = done ? { animation: "blink .6s 4 alternate" } : {};
 
-  // ---- bracket screen: one column per round, connector lines between rounds ----
+  // ---- bracket screen: one column per stage, connector lines between columns ----
+  // Source: the generated (auto-advancing) bracket if one exists, otherwise your matches grouped by their stage tag.
   const bracketView = (() => {
-    const b = st.bracket,
-      B = L.board;
+    const B = L.board;
     if (p.kind !== "bracket" || !B || B.on === false) return null;
-    if (!b) return E("board", "No bracket created yet");
-    const W = 1920 - 2 * B.x,
+    type Item = { key: string; next?: string | null; m: Match; done: boolean };
+    const find = (id: string) => st.matches.find((x) => x.id === id);
+    // Generated/manual bracket: columns = its rounds, links = each slot's "winner goes to".
+    // No bracket: your matches grouped by their optional stage tag (links only when a column halves).
+    const cols: { id: string; name: string; items: Item[] }[] = p.bracket
+      ? p.bracket.rounds.map((rd, r) => ({
+          id: rd.id,
+          name: rd.name,
+          items: rd.matches.flatMap((bm) => {
+            const m = find(bm.matchId);
+            return m
+              ? [{ key: bm.id, next: bm.nextMatchId, m, done: bm.completed }]
+              : [];
+          }),
+        }))
+      : stageColumns(st.matches).map((c) => ({
+          id: c.name,
+          name: c.name,
+          items: c.matches.map((m) => ({ key: m.id, m, done: !!winnerOf(m) })),
+        }));
+    const shown = cols.filter((c) => c.items.length);
+    if (!shown.length)
+      return E(
+        "board",
+        p.bracket
+          ? "Add matches to your bracket"
+          : "Give your matches a stage tag (Quarter Final, Semi Final…)",
+        { transform: "none" },
+      );
+    cols.length = 0;
+    cols.push(...shown);
+    const W = B.w ?? 1920 - 2 * B.x,
       H = B.h || 800,
-      R = b.rounds.length;
+      R = cols.length;
     const gap = Math.min(110, W / (R * 4)),
       colW = (W - gap * (R - 1)) / R;
-    const cardH = Math.min(B.s * 3.1, (H / b.rounds[0].matches.length) * 0.9);
+    const cardH = Math.min(
+      B.s * 3.1,
+      (H / Math.max(...cols.map((c) => c.items.length))) * 0.9,
+    );
     const cx = (r: number) => r * (colW + gap);
-    const cy = (r: number, i: number) =>
-      ((i + 0.5) * H) / b.rounds[r].matches.length;
+    const cy = (r: number, i: number) => ((i + 0.5) * H) / cols[r].items.length;
+    const pos = new Map<string, [number, number]>();
+    cols.forEach((c, r) => c.items.forEach((it, i) => pos.set(it.key, [r, i])));
+    const links: { from: [number, number]; to: [number, number] }[] = [];
+    cols.forEach((c, r) =>
+      c.items.forEach((it, i) => {
+        if (p.bracket) {
+          const t = it.next ? pos.get(it.next) : undefined;
+          if (t && t[0] > r) links.push({ from: [r, i], to: t });
+        } else if (
+          cols[r + 1] &&
+          cols[r + 1].items.length * 2 === c.items.length
+        )
+          links.push({ from: [r, i], to: [r + 1, i >> 1] });
+      }),
+    );
     return E(
       "board",
       <>
@@ -130,48 +178,47 @@ export default function Overlay() {
           height={H}
           style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}
         >
-          {b.rounds.slice(0, -1).flatMap((rd, r) =>
-            rd.matches.map((_, i) => {
-              const x1 = cx(r) + colW,
-                y1 = cy(r, i),
-                x2 = cx(r + 1),
-                y2 = cy(r + 1, i >> 1),
-                mx = x1 + gap / 2;
-              return (
-                <path
-                  key={r + "-" + i}
-                  d={`M${x1} ${y1}H${mx}V${y2}H${x2}`}
-                  fill="none"
-                  stroke={s.accent}
-                  strokeOpacity=".6"
-                  strokeWidth="3"
-                />
-              );
-            }),
-          )}
+          {links.map((l, k) => {
+            const x1 = cx(l.from[0]) + colW,
+              y1 = cy(l.from[0], l.from[1]),
+              x2 = cx(l.to[0]),
+              y2 = cy(l.to[0], l.to[1]),
+              mx = x1 + gap / 2;
+            return (
+              <path
+                key={k}
+                d={`M${x1} ${y1}H${mx}V${y2}H${x2}`}
+                fill="none"
+                stroke={s.accent}
+                strokeOpacity=".6"
+                strokeWidth="3"
+              />
+            );
+          })}
         </svg>
-        {b.rounds.map((rd, r) => (
-          <div key={rd.id}>
-            <div
-              style={{
-                position: "absolute",
-                left: cx(r),
-                top: -B.s * 1.7,
-                width: colW,
-                textAlign: "center",
-                color: s.accent,
-                fontSize: B.s * 0.8,
-              }}
-            >
-              {rd.name}
-            </div>
-            {rd.matches.map((bm, i) => {
-              const m = st.matches.find((x) => x.id === bm.matchId);
-              if (!m) return null;
-              const w = bm.completed ? winnerOf(m, true) : null;
+        {cols.map((c, r) => (
+          <div key={c.id}>
+            {c.name && (
+              <div
+                style={{
+                  position: "absolute",
+                  left: cx(r),
+                  top: -B.s * 1.7,
+                  width: colW,
+                  textAlign: "center",
+                  color: s.accent,
+                  fontSize: B.s * 0.8,
+                }}
+              >
+                {c.name}
+              </div>
+            )}
+            {c.items.map((it, i) => {
+              const m = it.m,
+                w = it.done ? winnerOf(m, true) : null;
               return (
                 <div
-                  key={bm.id}
+                  key={it.key}
                   style={{
                     position: "absolute",
                     left: cx(r),
@@ -216,7 +263,68 @@ export default function Overlay() {
         ))}
       </>,
       { width: W, height: H, transform: "none" },
-    ); // 'none': the bracket is positioned from its top-left, NOT centred
+    ); // 'none': positioned from its top-left, NOT centred
+  })();
+
+  // ---- points table screen: rank, team, P W D L, +/-, PTS (text shrinks to fit the Height you set) ----
+  const tableView = (() => {
+    const T = p.table,
+      B = L.board;
+    if (p.kind !== "table" || !B || B.on === false) return null;
+    if (!T) return null; // nothing on air until a table is created
+    const rows = standings(T),
+      champ = isComplete(T);
+    const fs = Math.min(B.s, (B.h || 800) / ((rows.length + 1) * 1.95));
+    const cols = `${fs * 2}px minmax(0,1fr) repeat(4, ${fs * 2.2}px) ${fs * 2.8}px ${fs * 3.2}px`;
+    const row: CSSProperties = {
+      display: "grid",
+      gridTemplateColumns: cols,
+      alignItems: "center",
+      gap: fs * 0.2,
+      height: fs * 1.7,
+      padding: `0 ${fs * 0.6}px`,
+    };
+    const cell = (v: ReactNode, i: number) => (
+      <span
+        key={i}
+        style={{
+          textAlign: i === 1 ? "left" : "center",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
+      >
+        {v}
+      </span>
+    );
+    return E(
+      "board",
+      <div style={{ display: "flex", flexDirection: "column", gap: fs * 0.25 }}>
+        <div style={{ ...row, color: s.accent, fontSize: fs * 0.8 }}>
+          {["#", "TEAM", "P", "W", "D", "L", "+/−", "PTS"].map((v, i) =>
+            cell(v, i),
+          )}
+        </div>
+        {rows.map((r) => (
+          <div
+            key={r.id}
+            style={{
+              ...row,
+              ...box,
+              borderColor: r.rank === 1 ? s.scoreC : s.accent,
+              color: s.nameC,
+            }}
+          >
+            {cell(champ && r.rank === 1 ? "🏆" : r.rank, 0)}
+            {cell(r.name, 1)}
+            {[r.p, r.w, r.d, r.l, r.gd > 0 ? "+" + r.gd : r.gd].map((v, i) =>
+              cell(v, i + 2),
+            )}
+            <b style={{ textAlign: "center", color: s.scoreC }}>{r.pts}</b>
+          </div>
+        ))}
+      </div>,
+      { width: B.w ?? 1200, fontSize: fs, transform: "none" },
+    );
   })();
 
   return (
@@ -246,14 +354,14 @@ export default function Overlay() {
                 top: L.banner.y,
                 width: L.banner.s,
                 height: L.banner.h,
-                objectFit: "cover",
+                objectFit: p.fit === "contain" ? "contain" : "cover",
               }}
             />
           )}
           {E("btitle", p.title)}
           {E("bsub", done ? p.done : p.sub)}
           {p.showCd && E("cd", fmtT(left), blink)}
-          {p.kind !== "bracket" &&
+          {!p.kind &&
             p.showBoard &&
             E(
               "board",
@@ -271,12 +379,16 @@ export default function Overlay() {
                 <Logo src={mt.b.logo} abbr={mt.b.abbr} size={ls} s={s} />
               </div>,
             )}
-          {p.showBoard &&
+          {!p.kind &&
+            p.showBoard &&
             E(
               "binfo",
-              [FMT[mt.fmt], p.info, mt.tour].filter(Boolean).join(" · "),
+              [mt.stage, FMT[mt.fmt], p.info, mt.tour]
+                .filter(Boolean)
+                .join(" · "),
             )}
           {bracketView}
+          {tableView}
         </div>
       </div>
     </div>

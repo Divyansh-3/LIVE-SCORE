@@ -5,6 +5,7 @@ export interface El {
   y: number;
   s: number;
   h?: number;
+  w?: number;
   on?: boolean;
 }
 export interface Style {
@@ -46,13 +47,38 @@ export interface Team {
 export interface Match {
   id: string;
   banner: string;
+  stage?: string;
   a: Team;
   b: Team;
   tour: string;
   fmt: "BO1" | "BO3" | "BO5";
 }
+export interface TableTeam {
+  id: string;
+  name: string;
+}
+export interface TableMatch {
+  id: string;
+  round: number;
+  a: string;
+  b: string;
+  sa: number | null;
+  sb: number | null;
+}
+export interface LeagueTable {
+  id: string;
+  name: string;
+  teams: TableTeam[];
+  matches: TableMatch[];
+  double: boolean;
+  win: number;
+  draw: number;
+}
 export interface Page {
-  kind?: "bracket";
+  table?: LeagueTable | null;
+  bracket?: Bracket | null;
+  kind?: "bracket" | "banner" | "table";
+  fit?: "cover" | "contain";
   id: string;
   name: string;
   title: string;
@@ -89,7 +115,6 @@ export interface State {
   pages: Page[];
   airId: string | null;
   matches: Match[];
-  bracket: Bracket | null;
   curId: string;
   rev: number;
   custom: Preset | null;
@@ -167,7 +192,12 @@ export const LAYOUT: Record<string, El> = {
 export const BRACKET_LAYOUT: Record<string, El> = {
   banner: { x: 0, y: 0, s: 1920, h: 1080 },
   btitle: { x: 960, y: 60, s: 56 },
-  board: { x: 100, y: 200, s: 28, h: 800 }, // x,y = top-left · s = text size · h = height (width = 1920 − 2·x)
+  board: { x: 100, y: 200, s: 28, h: 800, w: 1720 }, // x,y = top-left · s = text size · h = height · w = width
+};
+export const TABLE_LAYOUT: Record<string, El> = {
+  banner: { x: 0, y: 0, s: 1920, h: 1080 },
+  btitle: { x: 960, y: 70, s: 56 },
+  board: { x: 360, y: 190, s: 32, h: 820, w: 1200 }, // s = largest text size; the table shrinks its text to fit h
 };
 export const uid = () => Math.random().toString(36).slice(2, 9);
 export const mkScene = (t: number): Scene => ({
@@ -193,14 +223,45 @@ export const mkPage = (name: string): Page => ({
   scene: mkScene(120000),
 });
 /** The bracket screen: shown on OBS like a page, but listed in its own section and with its OWN banner. */
-export const mkBracketPage = (): Page => {
+export const mkBracketPage = (
+  id = "bracket-screen",
+  name = "Bracket",
+): Page => {
   const scene = mkScene(0);
   scene.layout = structuredClone(BRACKET_LAYOUT);
   return {
-    ...mkPage("Bracket"),
-    id: "bracket-screen",
+    ...mkPage(name),
+    id,
     kind: "bracket",
+    bracket: null,
     title: "TOURNAMENT BRACKET",
+    scene,
+  };
+};
+/** A plain page: ONLY an image (its own banner) – no title, countdown, scoreboard or any text. */
+export const mkBannerPage = (name: string): Page => {
+  const scene = mkScene(0);
+  scene.layout = { banner: { ...LAYOUT.banner } };
+  return {
+    ...mkPage(name),
+    kind: "banner",
+    title: "",
+    sub: "",
+    done: "",
+    showCd: false,
+    showBoard: false,
+    scene,
+  };
+};
+/** A table screen: shows one points table (its own teams, fixtures and results) with its own banner and style. */
+export const mkTablePage = (name = "Table"): Page => {
+  const scene = mkScene(0);
+  scene.layout = structuredClone(TABLE_LAYOUT);
+  return {
+    ...mkPage(name),
+    kind: "table",
+    table: null,
+    title: "POINTS TABLE",
     scene,
   };
 };
@@ -241,7 +302,6 @@ export function mkState(): State {
     custom: null,
     anim: true,
     matches: ms,
-    bracket: null,
     curId: ms[0].id,
     rev: 0,
   };
@@ -249,29 +309,35 @@ export function mkState(): State {
 export const mkMatch = (): Match => ({
   id: uid(),
   banner: "",
+  stage: "",
   tour: "TOURNAMENT",
   fmt: "BO3",
   a: { name: "TEAM A", abbr: "A", logo: "", score: 0 },
   b: { name: "TEAM B", abbr: "B", logo: "", score: 0 },
 });
-const withBracketPage = (s: any) =>
-  s.pages.some((p: any) => p.kind === "bracket")
-    ? s
-    : { ...s, pages: [...s.pages, mkBracketPage()] };
+/** Makes sure a bracket screen exists, and moves the old single shared bracket (s.bracket) onto it. */
+const fixBrackets = (s: any) => {
+  let pages = s.pages;
+  if (!pages.some((p: any) => p.kind === "bracket"))
+    pages = [...pages, mkBracketPage()];
+  if (s.bracket)
+    pages = pages.map((p: any, i: number) =>
+      p.kind === "bracket" &&
+      !p.bracket &&
+      i === pages.findIndex((q: any) => q.kind === "bracket")
+        ? { ...p, bracket: s.bracket }
+        : p,
+    );
+  const { bracket, ...rest } = s;
+  return { ...rest, pages };
+};
 // upgrade saves from the single-match version
 export function migrate(s: any): State | null {
-  if (s?.pages && s.matches)
-    return withBracketPage({ bracket: null, rev: 0, ...s });
+  if (s?.pages && s.matches) return fixBrackets({ rev: 0, ...s });
   if (s?.pages && s.match) {
     const m = { id: uid(), ...s.match };
     const { match, ...rest } = s;
-    return withBracketPage({
-      ...rest,
-      matches: [m],
-      curId: m.id,
-      bracket: null,
-      rev: 0,
-    });
+    return fixBrackets({ ...rest, matches: [m], curId: m.id, rev: 0 });
   }
   return null;
 }

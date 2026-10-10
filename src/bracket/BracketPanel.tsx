@@ -2,16 +2,26 @@ import { useState } from "react";
 import { mkMatch, type Match, type State } from "../model";
 import {
   STAGES,
+  addRound,
+  addSlot,
+  clearRoundNames,
   completeMatch,
   createBracket,
-  createBracketN,
-  locate,
+  labelOf,
+  linkPairs,
+  removeRound,
+  removeSlot,
+  renameRound,
   reopenMatch,
+  setBracket,
+  setNext,
+  startManual,
   winnerOf,
 } from "./bracket";
 
 interface Props {
   st: State;
+  pid: string; // the bracket screen being edited (each screen has its own bracket)
   up: (f: (d: State) => void) => void;
   onCur: (matchId: string) => void;
   onEdit: (matchId: string) => void;
@@ -26,6 +36,7 @@ const name = (m: Match) => `${m.a.name} vs ${m.b.name}`;
 
 export default function BracketPanel({
   st,
+  pid,
   up,
   onCur,
   onEdit,
@@ -33,46 +44,39 @@ export default function BracketPanel({
   say,
 }: Props) {
   const [size, setSize] = useState(8);
-  const [addN, setAddN] = useState(2);
-  const b = st.bracket;
-  const cur = st.matches.find((x) => x.id === st.curId);
-  const [tour, setTour] = useState(() => baseTour(cur?.tour));
+  const [tour, setTour] = useState(() =>
+    baseTour(st.matches.find((x) => x.id === st.curId)?.tour),
+  );
+  const b = st.pages.find((x) => x.id === pid)?.bracket ?? null;
+  const find = (id: string) => st.matches.find((x) => x.id === id);
+  const allSlots = b ? b.rounds.flatMap((r) => r.matches) : [];
+  const used = new Set(allSlots.map((s) => s.matchId));
+  const feeders = (id: string) =>
+    allSlots.filter((s) => s.nextMatchId === id).length;
 
-  const create = () => {
+  /** Runs an edit on a copy first; if it returns an error text, shows it instead of changing anything. */
+  const run = (f: (d: State) => string | void) => {
+    const err = f(structuredClone(st));
+    if (err) return say(err);
+    up((d) => {
+      f(d);
+    });
+  };
+
+  const createAuto = () => {
     const go = () => {
       const made = createBracket(size, tour.trim() || "TOURNAMENT");
       up((d) => {
-        d.bracket = made.bracket;
+        setBracket(d, pid, made.bracket);
         d.matches.push(...made.matches);
       });
     };
     if (b)
-      ask(
-        "Replace the current bracket? Its matches stay in your match list.",
-        go,
-      );
+      ask("Replace this bracket? Its matches stay in your match list.", go);
     else go();
   };
-
-  // Create a bracket from N new best-of-3 matches (rename the rounds afterwards)
-  const addMatches = () => {
-    const go = () => {
-      const made = createBracketN(addN, baseTour(cur?.tour));
-      up((d) => {
-        d.bracket = made.bracket;
-        d.matches.push(...made.matches);
-      });
-    };
-    if (b)
-      ask(
-        "Replace the current bracket? Its matches stay in your match list.",
-        go,
-      );
-    else go();
-  };
-
   const complete = (id: string, force = false) => {
-    const r = completeMatch(structuredClone(st), id, force); // dry run on a copy first
+    const r = completeMatch(structuredClone(st), pid, id, force); // dry run on a copy first
     if (!r.ok && r.canForce && !force)
       return ask(
         `${r.note}\n\nComplete anyway (the team with more points wins)?`,
@@ -80,132 +84,136 @@ export default function BracketPanel({
       );
     if (!r.ok) return say(r.note);
     up((d) => {
-      completeMatch(d, id, force);
+      completeMatch(d, pid, id, force);
     });
     say(r.note);
   };
-
   const delAll = () =>
     ask(
-      "Delete the bracket AND every match it uses? Their teams and scores are lost.",
-      doDelAll,
+      "Delete this bracket AND every match it uses (matches used by your other brackets are kept)? Their teams and scores are lost.",
+      () =>
+        up((d) => {
+          const pg = d.pages.find((x) => x.id === pid);
+          if (!pg?.bracket) return;
+          const keep = new Set(
+            d.pages
+              .filter((x) => x.id !== pid)
+              .flatMap((x) =>
+                x.bracket
+                  ? x.bracket.rounds.flatMap((r) =>
+                      r.matches.map((m) => m.matchId),
+                    )
+                  : [],
+              ),
+          );
+          const ids = new Set(
+            pg.bracket.rounds
+              .flatMap((r) => r.matches.map((m) => m.matchId))
+              .filter((i) => !keep.has(i)),
+          );
+          pg.bracket = null;
+          d.matches = d.matches.filter((x) => !ids.has(x.id));
+          if (!d.matches.length) d.matches.push(mkMatch());
+          if (!d.matches.some((x) => x.id === d.curId))
+            d.curId = d.matches[0].id;
+        }),
     );
-  const doDelAll = () => {
-    up((d) => {
-      const ids = new Set(
-        d.bracket!.rounds.flatMap((r) => r.matches.map((m) => m.matchId)),
-      );
-      d.bracket = null;
-      d.matches = d.matches.filter((x) => !ids.has(x.id));
-      if (!d.matches.length) d.matches.push(mkMatch());
-      if (!d.matches.some((x) => x.id === d.curId)) d.curId = d.matches[0].id;
-    });
-  };
+
+  const autoForm = (
+    <details style={{ marginTop: 14 }}>
+      <summary>
+        Advanced: auto-advancing bracket for 2 / 4 / 8 / 16 teams
+      </summary>
+      <p className="hint">
+        Builds the rounds and matches for you, without naming the rounds (you
+        type the names). “Complete &amp; advance” moves winners on.
+      </p>
+      <div className="txt">
+        <span>Tournament name</span>
+        <input value={tour} onChange={(e) => setTour(e.target.value)} />
+      </div>
+      <div className="btns">
+        Teams:{" "}
+        <select value={size} onChange={(e) => setSize(+e.target.value)}>
+          {[2, 4, 8, 16].map((n) => (
+            <option key={n}>{n}</option>
+          ))}
+        </select>
+        <button className="go" onClick={createAuto}>
+          Create automatic bracket
+        </button>
+      </div>
+    </details>
+  );
 
   if (!b)
     return (
       <div>
-        <h3>🏆 BRACKET FROM YOUR MATCHES</h3>
+        <h3>🏆 BRACKET</h3>
         <p className="hint">
-          Pick how many matches you want and press “Create bracket”. The rounds
-          are built for you and you can rename any round afterwards (Semi Final,
-          Quarter Final, Group Stage…). Or tag existing matches by hand below.
-          Leave a match blank to keep it out of the tag-based bracket.
+          Build it step by step: start an empty bracket, add a round, add
+          matches into it, then choose where each winner goes. You type the
+          round names yourself (Quarter Final, Semi Final, Final… or anything) —
+          nothing is named or tagged for you.
         </p>
-        <datalist id="stages-b">
-          {STAGES.map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-
         <div className="btns">
-          Matches:{" "}
-          <select value={addN} onChange={(e) => setAddN(+e.target.value)}>
-            {[2, 4, 6, 8, 10, 12, 14, 16].map((n) => (
-              <option key={n}>{n}</option>
-            ))}
-          </select>
-          <button className="go" onClick={addMatches}>
-            Create bracket
+          <button className="go" onClick={() => up((d) => startManual(d, pid))}>
+            Start a new bracket
           </button>
         </div>
-
-        {st.matches.map((m, i) => (
-          <div className="txt" key={m.id}>
-            <span style={{ minWidth: 250 }}>
-              {i + 1}. {name(m)}
-            </span>
-            <input
-              list="stages-b"
-              placeholder="stage tag"
-              value={m.stage || ""}
-              onChange={(e) =>
-                up((d) => {
-                  d.matches.find((x) => x.id === m.id)!.stage = e.target.value;
-                })
-              }
-            />
-            <button onClick={() => onEdit(m.id)}>Edit</button>
-          </div>
-        ))}
-        <details style={{ marginTop: 14 }}>
-          <summary>
-            Advanced: auto-advancing bracket (creates new matches)
-          </summary>
-          <p className="hint">
-            Creates empty matches for every slot, and “Complete &amp; advance”
-            moves winners on automatically.
-          </p>
-          <div className="txt">
-            <span>Tournament name</span>
-            <input value={tour} onChange={(e) => setTour(e.target.value)} />
-          </div>
-          <div className="btns">
-            Teams:{" "}
-            <select value={size} onChange={(e) => setSize(+e.target.value)}>
-              {[2, 4, 8, 16].map((n) => (
-                <option key={n}>{n}</option>
-              ))}
-            </select>
-            <button className="go" onClick={create}>
-              Create bracket
-            </button>
-          </div>
-        </details>
+        {autoForm}
       </div>
     );
 
   return (
     <div>
-      <h3>🏆 BRACKET — {b.format}</h3>
+      <h3>🏆 BRACKET</h3>
       <p className="hint">
-        Scores are the normal match scores. “Make current” puts that match on
-        the scoreboard; “Complete &amp; advance” moves the winner on. Click a
-        round name to rename it.
+        Step by step: ① type a round name (optional) ② “+ New match” (or add an
+        existing one) ③ on each match, pick <b>Winner goes to</b> (or press{" "}
+        <b>Link pairs →</b> on the round) ④ “+ Add round” for the next stage.
+        Winners move up when you press “Complete &amp; advance”.
       </p>
+      <datalist id="stages-b">
+        {STAGES.map((s) => (
+          <option key={s} value={s} />
+        ))}
+      </datalist>
       <div className="rounds">
-        {b.rounds.map((rd) => (
+        {b.rounds.map((rd, r) => (
           <div className="rcol" key={rd.id}>
             <input
               list="stages-b"
+              placeholder={`Round ${r + 1} name (e.g. Semi Final)`}
               value={rd.name}
-              title="Rename this round"
               onChange={(e) =>
-                up((d) => {
-                  const r = d.bracket!.rounds.find((x) => x.id === rd.id)!;
-                  r.name = e.target.value;
-                  r.matches.forEach((bm) => {
-                    const m = d.matches.find((x) => x.id === bm.matchId);
-                    if (m) m.stage = e.target.value;
-                  });
-                })
+                up((d) => renameRound(d, pid, rd.id, e.target.value))
               }
             />
+            <div className="btns">
+              {r < b.rounds.length - 1 && (
+                <button
+                  title="Send this round's winners to the next round, two by two"
+                  onClick={() => run((d) => linkPairs(d, pid, rd.id))}
+                >
+                  Link pairs →
+                </button>
+              )}
+              <button
+                className="danger"
+                onClick={() =>
+                  ask(
+                    `Remove ${rd.name || "round " + (r + 1)}? Its matches stay in your match list.`,
+                    () => up((d) => removeRound(d, pid, rd.id)),
+                  )
+                }
+              >
+                Remove round
+              </button>
+            </div>
+
             {rd.matches.map((bm) => {
-              const m = st.matches.find((x) => x.id === bm.matchId);
-              const next = bm.nextMatchId
-                ? locate(b, bm.nextMatchId)?.bm.label
-                : null;
+              const m = find(bm.matchId);
               const w = m && bm.completed ? winnerOf(m, true) : null;
               return (
                 <div
@@ -217,9 +225,16 @@ export default function BracketPanel({
                   }
                 >
                   <div className="bmh">
-                    <b>{bm.label}</b>
-                    {next && <span className="hint">→ {next}</span>}
+                    <b>{labelOf(b, bm.id)}</b>
                     {bm.completed && <span className="tag n">DONE</span>}
+                    <span style={{ flex: 1 }} />
+                    <button
+                      className="danger"
+                      title="Remove this slot (the match stays in your list)"
+                      onClick={() => up((d) => removeSlot(d, pid, bm.id))}
+                    >
+                      ✕
+                    </button>
                   </div>
                   {m ? (
                     (["a", "b"] as const).map((t) => (
@@ -236,16 +251,50 @@ export default function BracketPanel({
                     title="Which match this slot uses"
                     onChange={(e) =>
                       up((d) => {
-                        locate(d.bracket!, bm.id)!.bm.matchId = e.target.value;
+                        d.pages
+                          .find((x) => x.id === pid)
+                          ?.bracket?.rounds.forEach((x) =>
+                            x.matches.forEach((s) => {
+                              if (s.id === bm.id) s.matchId = e.target.value;
+                            }),
+                          );
                       })
                     }
                   >
                     {!m && <option value={bm.matchId}>— pick a match —</option>}
-                    {st.matches.map((x, i) => (
-                      <option key={x.id} value={x.id}>
-                        {i + 1}. {name(x)}
-                      </option>
-                    ))}
+                    {st.matches
+                      .filter((x) => x.id === bm.matchId || !used.has(x.id))
+                      .map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {st.matches.indexOf(x) + 1}. {name(x)}
+                        </option>
+                      ))}
+                  </select>
+                  <select
+                    value={bm.nextMatchId || ""}
+                    title="Where does the winner go?"
+                    onChange={(e) =>
+                      run((d) => setNext(d, pid, bm.id, e.target.value || null))
+                    }
+                  >
+                    <option value="">Winner goes to… (nowhere)</option>
+                    {b.rounds.slice(r + 1).flatMap((rr) =>
+                      rr.matches.map((t) => {
+                        const tm = find(t.matchId);
+                        return (
+                          <option
+                            key={t.id}
+                            value={t.id}
+                            disabled={
+                              t.id !== bm.nextMatchId && feeders(t.id) >= 2
+                            }
+                          >
+                            ↑ {labelOf(b, t.id)}
+                            {tm ? ` (${name(tm)})` : ""}
+                          </option>
+                        );
+                      }),
+                    )}
                   </select>
                   <div className="btns">
                     <button className="go" onClick={() => onCur(bm.matchId)}>
@@ -253,7 +302,9 @@ export default function BracketPanel({
                     </button>
                     <button onClick={() => onEdit(bm.matchId)}>Edit</button>
                     {bm.completed ? (
-                      <button onClick={() => up((d) => reopenMatch(d, bm.id))}>
+                      <button
+                        onClick={() => up((d) => reopenMatch(d, pid, bm.id))}
+                      >
                         Reopen
                       </button>
                     ) : (
@@ -265,17 +316,48 @@ export default function BracketPanel({
                 </div>
               );
             })}
+
+            <div className="btns">
+              <button
+                className="go"
+                onClick={() => up((d) => addSlot(d, pid, rd.id))}
+              >
+                + New match
+              </button>
+              <select
+                value=""
+                onChange={(e) =>
+                  e.target.value &&
+                  up((d) => addSlot(d, pid, rd.id, e.target.value))
+                }
+              >
+                <option value="">+ Existing match…</option>
+                {st.matches
+                  .filter((x) => !used.has(x.id))
+                  .map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {st.matches.indexOf(x) + 1}. {name(x)}
+                    </option>
+                  ))}
+              </select>
+            </div>
           </div>
         ))}
+        <div className="rcol">
+          <button className="go" onClick={() => up((d) => addRound(d, pid))}>
+            + Add round
+          </button>
+        </div>
       </div>
       <div className="btns">
+        <button onClick={() => up((d) => clearRoundNames(d, pid))}>
+          Clear all round names
+        </button>
         <button
           className="danger"
           onClick={() =>
-            ask("Delete the bracket? Your matches and scores are kept.", () =>
-              up((d) => {
-                d.bracket = null;
-              }),
+            ask("Delete this bracket? Your matches and scores are kept.", () =>
+              up((d) => setBracket(d, pid, null)),
             )
           }
         >
@@ -285,6 +367,7 @@ export default function BracketPanel({
           Delete bracket + its matches
         </button>
       </div>
+      {autoForm}
     </div>
   );
 }
