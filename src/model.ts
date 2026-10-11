@@ -5,6 +5,7 @@ export interface El {
   y: number;
   s: number;
   h?: number;
+  w?: number;
   on?: boolean;
 }
 export interface Style {
@@ -46,12 +47,44 @@ export interface Team {
 export interface Match {
   id: string;
   banner: string;
+  stage?: string;
   a: Team;
   b: Team;
   tour: string;
   fmt: "BO1" | "BO3" | "BO5";
 }
+export interface TableTeam {
+  id: string;
+  name: string;
+}
+export interface TableMatch {
+  id: string;
+  round: number;
+  a: string;
+  b: string;
+  sa: number | null;
+  sb: number | null;
+}
+export interface LeagueTable {
+  id: string;
+  name: string;
+  teams: TableTeam[];
+  matches: TableMatch[];
+  double: boolean;
+  win: number;
+  draw: number;
+}
+export interface ScheduleItem {
+  id: string;
+  matchId: string;
+  time: string;
+}
 export interface Page {
+  schedule?: ScheduleItem[];
+  table?: LeagueTable | null;
+  bracket?: Bracket | null;
+  kind?: "bracket" | "banner" | "table" | "schedule";
+  fit?: "cover" | "contain";
   id: string;
   name: string;
   title: string;
@@ -68,11 +101,28 @@ export interface Preset {
   style: Partial<Style>;
   layout?: Record<string, El>;
 }
+export interface BracketMatch {
+  id: string;
+  matchId: string;
+  nextMatchId: string | null;
+  completed: boolean;
+  label: string;
+}
+export interface BracketRound {
+  id: string;
+  name: string;
+  matches: BracketMatch[];
+}
+export interface Bracket {
+  format: "single-elimination" | "double-elimination";
+  rounds: BracketRound[];
+}
 export interface State {
   pages: Page[];
   airId: string | null;
   matches: Match[];
   curId: string;
+  rev: number;
   custom: Preset | null;
   anim: boolean;
 }
@@ -145,6 +195,22 @@ export const LAYOUT: Record<string, El> = {
   board: { x: 960, y: 730, s: 48 },
   binfo: { x: 960, y: 840, s: 28 },
 };
+export const BRACKET_LAYOUT: Record<string, El> = {
+  banner: { x: 0, y: 0, s: 1920, h: 1080 },
+  btitle: { x: 960, y: 60, s: 56 },
+  board: { x: 100, y: 200, s: 28, h: 800, w: 1720 }, // x,y = top-left · s = text size · h = height · w = width
+};
+export const TABLE_LAYOUT: Record<string, El> = {
+  banner: { x: 0, y: 0, s: 1920, h: 1080 },
+  btitle: { x: 960, y: 70, s: 56 },
+  board: { x: 360, y: 190, s: 32, h: 820, w: 1200 }, // s = largest text size; the table shrinks its text to fit h
+};
+export const SCHEDULE_LAYOUT: Record<string, El> = {
+  banner: { x: 0, y: 0, s: 1920, h: 1080 },
+  btitle: { x: 960, y: 60, s: 56 },
+  bsub: { x: 960, y: 140, s: 34 },
+  board: { x: 360, y: 210, s: 30, h: 800, w: 1200 }, // s = largest text size; rows shrink to fit h
+};
 export const uid = () => Math.random().toString(36).slice(2, 9);
 export const mkScene = (t: number): Scene => ({
   layout: structuredClone(LAYOUT),
@@ -168,6 +234,65 @@ export const mkPage = (name: string): Page => ({
   matchId: "",
   scene: mkScene(120000),
 });
+/** The bracket screen: shown on OBS like a page, but listed in its own section and with its OWN banner. */
+export const mkBracketPage = (
+  id = "bracket-screen",
+  name = "Bracket",
+): Page => {
+  const scene = mkScene(0);
+  scene.layout = structuredClone(BRACKET_LAYOUT);
+  return {
+    ...mkPage(name),
+    id,
+    kind: "bracket",
+    bracket: null,
+    title: "TOURNAMENT BRACKET",
+    scene,
+  };
+};
+/** A plain page: ONLY an image (its own banner) – no title, countdown, scoreboard or any text. */
+export const mkBannerPage = (name: string): Page => {
+  const scene = mkScene(0);
+  scene.layout = { banner: { ...LAYOUT.banner } };
+  return {
+    ...mkPage(name),
+    kind: "banner",
+    title: "",
+    sub: "",
+    done: "",
+    showCd: false,
+    showBoard: false,
+    scene,
+  };
+};
+/** A table screen: shows one points table (its own teams, fixtures and results) with its own banner and style. */
+export const mkTablePage = (name = "Table"): Page => {
+  const scene = mkScene(0);
+  scene.layout = structuredClone(TABLE_LAYOUT);
+  return {
+    ...mkPage(name),
+    kind: "table",
+    table: null,
+    title: "POINTS TABLE",
+    scene,
+  };
+};
+/** "Today's matches": like a break screen but with no timer – a banner, a title and a list of matches. */
+export const mkSchedulePage = (name = "Today"): Page => {
+  const scene = mkScene(0);
+  scene.layout = structuredClone(SCHEDULE_LAYOUT);
+  return {
+    ...mkPage(name),
+    kind: "schedule",
+    schedule: [],
+    title: "TODAY'S MATCHES",
+    sub: "",
+    done: "",
+    showCd: false,
+    showBoard: true,
+    scene,
+  };
+};
 export function mkState(): State {
   const soon = mkPage("Starting soon"),
     b1 = mkPage("Break 1"),
@@ -200,29 +325,47 @@ export function mkState(): State {
     tm("STORM RIDERS", "SR", "LUNAR FOX", "LF", "BO5"),
   ];
   return {
-    pages: [soon, b1, b2],
+    pages: [soon, b1, b2, mkBracketPage()],
     airId: soon.id,
     custom: null,
     anim: true,
     matches: ms,
     curId: ms[0].id,
+    rev: 0,
   };
 }
 export const mkMatch = (): Match => ({
   id: uid(),
   banner: "",
+  stage: "",
   tour: "TOURNAMENT",
   fmt: "BO3",
   a: { name: "TEAM A", abbr: "A", logo: "", score: 0 },
   b: { name: "TEAM B", abbr: "B", logo: "", score: 0 },
 });
+/** Makes sure a bracket screen exists, and moves the old single shared bracket (s.bracket) onto it. */
+const fixBrackets = (s: any) => {
+  let pages = s.pages;
+  if (!pages.some((p: any) => p.kind === "bracket"))
+    pages = [...pages, mkBracketPage()];
+  if (s.bracket)
+    pages = pages.map((p: any, i: number) =>
+      p.kind === "bracket" &&
+      !p.bracket &&
+      i === pages.findIndex((q: any) => q.kind === "bracket")
+        ? { ...p, bracket: s.bracket }
+        : p,
+    );
+  const { bracket, ...rest } = s;
+  return { ...rest, pages };
+};
 // upgrade saves from the single-match version
 export function migrate(s: any): State | null {
-  if (s?.pages && s.matches) return s;
+  if (s?.pages && s.matches) return fixBrackets({ rev: 0, ...s });
   if (s?.pages && s.match) {
     const m = { id: uid(), ...s.match };
     const { match, ...rest } = s;
-    return { ...rest, matches: [m], curId: m.id };
+    return fixBrackets({ ...rest, matches: [m], curId: m.id, rev: 0 });
   }
   return null;
 }
@@ -247,15 +390,4 @@ export function useNow(ms = 200) {
     return () => clearInterval(t);
   }, [ms]);
   return n;
-}
-export function useRemote(): State | null {
-  const [s, set] = useState<State | null>(null);
-  useEffect(() => {
-    const es = new EventSource("/api/events");
-    es.onmessage = (e) => {
-      if (e.data) set(JSON.parse(e.data));
-    };
-    return () => es.close();
-  }, []);
-  return s;
 }
