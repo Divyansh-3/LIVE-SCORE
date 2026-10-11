@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import BracketPanel from "./bracket/BracketPanel";
 import TablePanel from "./table/TablePanel";
+import SchedulePanel from "./schedule/SchedulePanel";
 import { champion } from "./table/table";
 import { STAGES } from "./bracket/bracket";
 import { loadOrInit, saveState } from "./storage/db";
@@ -11,6 +12,7 @@ import {
   fmtT,
   mkBannerPage,
   mkBracketPage,
+  mkSchedulePage,
   mkTablePage,
   mkMatch,
   mkPage,
@@ -191,7 +193,7 @@ export default function Control() {
   const [st, setSt] = useState<State | null>(null);
   const [sel, setSel] = useState("");
   const [tab, setTab] = useState<
-    "page" | "match" | "bracket" | "table" | "layout" | "look"
+    "page" | "match" | "bracket" | "table" | "schedule" | "layout" | "look"
   >("page");
   const [pre, setPre] = useState("Modern"),
     [tgt, setTgt] = useState("this"),
@@ -278,7 +280,8 @@ export default function Control() {
         return;
       if (e.key === "0") air(null);
       const list = st.pages.filter(
-          (x) => x.kind !== "bracket" && x.kind !== "table",
+          (x) =>
+            x.kind !== "bracket" && x.kind !== "table" && x.kind !== "schedule",
         ),
         i = +e.key;
       if (i >= 1 && list[i - 1]) air(list[i - 1].id);
@@ -353,8 +356,9 @@ export default function Control() {
     });
   const airIdx = st.pages.findIndex((x) => x.id === st.airId);
   const shown = st.pages.filter(
-    (x) => x.kind !== "bracket" && x.kind !== "table",
+    (x) => x.kind !== "bracket" && x.kind !== "table" && x.kind !== "schedule",
   ); // numbered pages (matches' breaks)
+  const sch = st.pages.filter((x) => x.kind === "schedule"); // today's-matches screens (own section)
   const tbs = st.pages.filter((x) => x.kind === "table"); // the table screens (own section)
   const bps = st.pages.filter((x) => x.kind === "bracket"); // the bracket screens (own section)
   const airPage = st.pages[airIdx];
@@ -363,16 +367,21 @@ export default function Control() {
       ? "🏆 " + x.name
       : x.kind === "table"
         ? "📊 " + x.name
-        : `${shown.indexOf(x) + 1}. ${x.name}`;
+        : x.kind === "schedule"
+          ? "🗓 " + x.name
+          : `${shown.indexOf(x) + 1}. ${x.name}`;
   const lab = (id: string) =>
-    (p.kind === "bracket" || p.kind === "table"
+    (p.kind === "bracket" || p.kind === "table" || p.kind === "schedule"
       ? (
           {
             btitle: "Title",
+            bsub: "Subtitle",
             board:
-              p.kind === "table"
-                ? "Table (X,Y = top-left · Size = largest text · Width/Height)"
-                : "Bracket (X,Y = top-left · Size = text · Width/Height)",
+              p.kind === "schedule"
+                ? "Matches list (X,Y = top-left · Size = largest text · Width/Height)"
+                : p.kind === "table"
+                  ? "Table (X,Y = top-left · Size = largest text · Width/Height)"
+                  : "Bracket (X,Y = top-left · Size = text · Width/Height)",
           } as Record<string, string>
         )[id]
       : undefined) ||
@@ -380,14 +389,24 @@ export default function Control() {
     id;
   const onAir = p.id === st.airId;
   // The bracket screen only gets bracket tools; normal pages never see the bracket tab
-  const tabs: ("page" | "match" | "bracket" | "table" | "layout" | "look")[] =
+  const tabs: (
+    | "page"
+    | "match"
+    | "bracket"
+    | "table"
+    | "schedule"
+    | "layout"
+    | "look"
+  )[] =
     p.kind === "bracket"
       ? ["bracket", "layout", "look"]
       : p.kind === "table"
         ? ["table", "layout", "look"]
-        : p.kind === "banner"
-          ? ["page", "layout"]
-          : ["page", "match", "layout", "look"];
+        : p.kind === "schedule"
+          ? ["schedule", "layout", "look"]
+          : p.kind === "banner"
+            ? ["page", "layout"]
+            : ["page", "match", "layout", "look"];
   const tb = tabs.includes(tab) ? tab : tabs[0];
 
   const run = !!sc.cd.endsAt && sc.cd.endsAt > now;
@@ -474,6 +493,26 @@ export default function Control() {
     setSel(nid);
     setTab("table");
   };
+  const addSchedule = () => {
+    const np = mkSchedulePage("Today " + (sch.length + 1));
+    up((d) => {
+      d.pages.push(np);
+    });
+    setSel(np.id);
+    setTab("schedule");
+  };
+  const dupSchedule = (id: string) => {
+    const nid = uid();
+    up((d) => {
+      const i = d.pages.findIndex((x) => x.id === id),
+        c = structuredClone(d.pages[i]);
+      c.id = nid;
+      c.name += " copy";
+      d.pages.splice(i + 1, 0, c);
+    });
+    setSel(nid);
+    setTab("schedule");
+  };
   const dup = () => {
     if (p.kind === "bracket")
       return say("The bracket screen cannot be duplicated.");
@@ -492,7 +531,12 @@ export default function Control() {
     if (!x) return;
     if (x.kind === "bracket" && bps.length < 2)
       return say("You need at least one bracket screen. Just do not show it.");
-    if (x.kind !== "bracket" && x.kind !== "table" && shown.length < 2)
+    if (
+      x.kind !== "bracket" &&
+      x.kind !== "table" &&
+      x.kind !== "schedule" &&
+      shown.length < 2
+    )
       return say("You need at least one page.");
     ask(`Delete "${x.name}"?`, () => {
       up((d) => {
@@ -509,7 +553,12 @@ export default function Control() {
   const move = (dir: number) =>
     up((d) => {
       const ids = d.pages
-          .filter((x) => x.kind !== "bracket" && x.kind !== "table")
+          .filter(
+            (x) =>
+              x.kind !== "bracket" &&
+              x.kind !== "table" &&
+              x.kind !== "schedule",
+          )
           .map((x) => x.id),
         k = ids.indexOf(p.id) + dir;
       if (k < 0 || k >= ids.length) return;
@@ -886,12 +935,6 @@ export default function Control() {
           ))}
           <div className="btns">
             <button onClick={add}>+ New page</button>
-            <button
-              onClick={addBanner}
-              title="A page with only an image – no text at all"
-            >
-              + New banner page
-            </button>
             <button onClick={dup}>Duplicate</button>
           </div>
           <div className="btns">
@@ -1034,10 +1077,73 @@ export default function Control() {
               + New table
             </button>
           </div>
+
+          <h3>⑤ TODAY'S MATCHES</h3>
+          <p className="hint">
+            A screen that lists the matches being played today, with a banner
+            and no timer. Add as many as you need (Morning, Evening…).
+          </p>
+          {sch.map((sp) => (
+            <div
+              key={sp.id}
+              className={
+                "pg" +
+                (sp.id === p.id ? " sel" : "") +
+                (sp.id === st.airId ? " air" : "")
+              }
+              onClick={() => {
+                setSel(sp.id);
+                setTab("schedule");
+              }}
+            >
+              <b className="no">🗓</b>
+              <div>
+                {sp.name}
+                <small>{(sp.schedule ?? []).length} match(es)</small>
+              </div>
+              {sp.id === st.airId ? (
+                <span className="tag">ON AIR</span>
+              ) : (
+                <button
+                  className="go"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    air(sp.id);
+                  }}
+                >
+                  ▶ Show
+                </button>
+              )}
+              <button
+                title="Duplicate this screen"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  dupSchedule(sp.id);
+                }}
+              >
+                ⧉
+              </button>
+              <button
+                className="danger"
+                title="Delete this screen"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  delP(sp.id);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <div className="btns">
+            <button className="go" onClick={addSchedule}>
+              + New today's-matches screen
+            </button>
+          </div>
         </div>
 
         <div>
-          <h3>④ EDITING: {lbl(p)}</h3>
+          <h3>⑥ EDITING: {lbl(p)}</h3>
           <div className="btns">
             {onAir ? (
               <span className="tag">
@@ -1062,6 +1168,7 @@ export default function Control() {
                     match: "Teams & match",
                     bracket: "🏆 Bracket options",
                     table: "📊 Table options",
+                    schedule: "🗓 Matches list",
                     layout: "Position & size",
                     look: "Colors & style",
                   }[t]
@@ -1448,6 +1555,62 @@ export default function Control() {
             </>
           )}
 
+          {tb === "schedule" && (
+            <>
+              <Txt
+                l="Screen name"
+                v={p.name}
+                set={(v) =>
+                  setP((x) => {
+                    x.name = v;
+                  })
+                }
+              />
+              <Txt
+                l="Title on screen"
+                v={p.title}
+                set={(v) =>
+                  setP((x) => {
+                    x.title = v;
+                  })
+                }
+              />
+              <Txt
+                l="Line under title"
+                v={p.sub}
+                set={(v) =>
+                  setP((x) => {
+                    x.sub = v;
+                  })
+                }
+              />
+              <Chk
+                l="Show scores"
+                v={p.showBoard}
+                set={(v) =>
+                  setP((x) => {
+                    x.showBoard = v;
+                  })
+                }
+              />
+              <Img
+                l="Banner (only this screen)"
+                v={p.banner}
+                set={(v) =>
+                  setP((x) => {
+                    x.banner = v;
+                  })
+                }
+              />
+              <p className="hint">
+                Like a break screen, but with no timer. The banner belongs to
+                this screen only. Use “Position &amp; size” to move or resize
+                the list.
+              </p>
+              <SchedulePanel st={st} pid={p.id} up={up} ask={ask} />
+            </>
+          )}
+
           {tb === "layout" && (
             <>
               <p className="hint">
@@ -1474,7 +1637,9 @@ export default function Control() {
                       up((d) => {
                         const l = PP(d).scene.layout[id];
                         if (
-                          (p.kind === "bracket" || p.kind === "table") &&
+                          (p.kind === "bracket" ||
+                            p.kind === "table" ||
+                            p.kind === "schedule") &&
                           id === "board" &&
                           l.w === undefined
                         )
@@ -1500,7 +1665,9 @@ export default function Control() {
                       set={(v) => el(id, "h", v)}
                     />
                   )}
-                  {(p.kind === "bracket" || p.kind === "table") &&
+                  {(p.kind === "bracket" ||
+                    p.kind === "table" ||
+                    p.kind === "schedule") &&
                     id === "board" && (
                       <Num
                         l="Width"
@@ -1510,7 +1677,9 @@ export default function Control() {
                         set={(v) => el(id, "w", v)}
                       />
                     )}
-                  {(p.kind === "bracket" || p.kind === "table") &&
+                  {(p.kind === "bracket" ||
+                    p.kind === "table" ||
+                    p.kind === "schedule") &&
                     id === "board" && (
                       <div className="btns" style={{ width: "100%" }}>
                         <b style={{ width: "auto" }}>Shift:</b>
@@ -1701,7 +1870,7 @@ export default function Control() {
         </div>
 
         <div style={{ position: "sticky", top: 0, alignSelf: "start" }}>
-          <h3>⑤ WHAT OBS SHOWS NOW</h3>
+          <h3>⑦ WHAT OBS SHOWS NOW</h3>
           <div className="pv">
             <iframe src="/#overlay" title="on air" />
           </div>

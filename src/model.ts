@@ -74,10 +74,16 @@ export interface LeagueTable {
   win: number;
   draw: number;
 }
+export interface ScheduleItem {
+  id: string;
+  matchId: string;
+  time: string;
+}
 export interface Page {
+  schedule?: ScheduleItem[];
   table?: LeagueTable | null;
   bracket?: Bracket | null;
-  kind?: "bracket" | "banner" | "table";
+  kind?: "bracket" | "banner" | "table" | "schedule";
   fit?: "cover" | "contain";
   id: string;
   name: string;
@@ -199,6 +205,12 @@ export const TABLE_LAYOUT: Record<string, El> = {
   btitle: { x: 960, y: 70, s: 56 },
   board: { x: 360, y: 190, s: 32, h: 820, w: 1200 }, // s = largest text size; the table shrinks its text to fit h
 };
+export const SCHEDULE_LAYOUT: Record<string, El> = {
+  banner: { x: 0, y: 0, s: 1920, h: 1080 },
+  btitle: { x: 960, y: 60, s: 56 },
+  bsub: { x: 960, y: 140, s: 34 },
+  board: { x: 360, y: 210, s: 30, h: 800, w: 1200 }, // s = largest text size; rows shrink to fit h
+};
 export const uid = () => Math.random().toString(36).slice(2, 9);
 export const mkScene = (t: number): Scene => ({
   layout: structuredClone(LAYOUT),
@@ -262,6 +274,22 @@ export const mkTablePage = (name = "Table"): Page => {
     kind: "table",
     table: null,
     title: "POINTS TABLE",
+    scene,
+  };
+};
+/** "Today's matches": like a break screen but with no timer – a banner, a title and a list of matches. */
+export const mkSchedulePage = (name = "Today"): Page => {
+  const scene = mkScene(0);
+  scene.layout = structuredClone(SCHEDULE_LAYOUT);
+  return {
+    ...mkPage(name),
+    kind: "schedule",
+    schedule: [],
+    title: "TODAY'S MATCHES",
+    sub: "",
+    done: "",
+    showCd: false,
+    showBoard: true,
     scene,
   };
 };

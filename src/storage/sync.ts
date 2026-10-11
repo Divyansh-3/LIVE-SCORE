@@ -1,8 +1,3 @@
-// Real-time sync between the Control Panel and Overlay pages (same browser profile).
-//   1. BroadcastChannel – instant push of every change
-//   2. A 2-second check of the tiny "rev" key in IndexedDB – safety net if a message is ever missed
-// Every state carries a revision number (rev). A page only accepts a state NEWER than the one it has,
-// so an old state can never overwrite a newer one.
 import { useEffect, useState } from "react";
 import type { State } from "../model";
 import { loadRev, loadState } from "./db";

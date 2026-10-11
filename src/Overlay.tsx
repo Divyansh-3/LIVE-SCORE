@@ -327,6 +327,61 @@ export default function Overlay() {
     );
   })();
 
+  // ---- today's matches: time · team A · score/VS · team B · format (text shrinks to fit the Height you set) ----
+  const scheduleView = (() => {
+    const B = L.board;
+    if (p.kind !== "schedule" || !B || B.on === false) return null;
+    const rows = (p.schedule ?? []).flatMap((it) => {
+      const m = st.matches.find((x) => x.id === it.matchId);
+      return m ? [{ it, m }] : [];
+    });
+    if (!rows.length) return null;
+    const fs = Math.min(B.s, (B.h || 800) / (rows.length * 1.95));
+    const cols = `${fs * 5.5}px minmax(0,1fr) ${fs * 3.6}px minmax(0,1fr) ${fs * 3}px`;
+    const cut: CSSProperties = { overflow: "hidden", textOverflow: "ellipsis" };
+    return E(
+      "board",
+      <div style={{ display: "flex", flexDirection: "column", gap: fs * 0.25 }}>
+        {rows.map(({ it, m }) => {
+          const tot = m.a.score + m.b.score;
+          return (
+            <div
+              key={it.id}
+              style={{
+                display: "grid",
+                gridTemplateColumns: cols,
+                alignItems: "center",
+                gap: fs * 0.4,
+                height: fs * 1.7,
+                padding: `0 ${fs * 0.6}px`,
+                ...box,
+                borderColor: m.id === st.curId ? s.scoreC : s.accent,
+                color: s.nameC,
+              }}
+            >
+              <span style={{ ...cut, color: s.accent }}>{it.time}</span>
+              <span style={{ ...cut, textAlign: "right" }}>{m.a.name}</span>
+              <b style={{ textAlign: "center", color: s.scoreC }}>
+                {p.showBoard && tot > 0 ? `${m.a.score} — ${m.b.score}` : "VS"}
+              </b>
+              <span style={cut}>{m.b.name}</span>
+              <span
+                style={{
+                  textAlign: "right",
+                  color: s.accent,
+                  fontSize: fs * 0.75,
+                }}
+              >
+                {m.fmt}
+              </span>
+            </div>
+          );
+        })}
+      </div>,
+      { width: B.w ?? 1200, fontSize: fs, transform: "none" },
+    );
+  })();
+
   return (
     <div className="ovr">
       <div
@@ -389,6 +444,7 @@ export default function Overlay() {
             )}
           {bracketView}
           {tableView}
+          {scheduleView}
         </div>
       </div>
     </div>

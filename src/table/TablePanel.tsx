@@ -220,7 +220,7 @@ export default function TablePanel({ st, pid, up, ask, say }: Props) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id} className={r.rank === 1 ? "top" : ""}>
+            <tr key={r.id} className={r.rank === 1 ? "leader" : ""}>
               <td>{r.rank}</td>
               <td>{r.name}</td>
               <td>{r.p}</td>

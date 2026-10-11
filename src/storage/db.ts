@@ -1,7 +1,3 @@
-// IndexedDB persistence for the whole tournament State.
-// Everything lives in one object store ("kv") under two keys:
-//   "state" – the full State object (images included, no 5 MB localStorage limit)
-//   "rev"   – just the revision number, so other pages can cheaply check "is there something newer?"
 import { migrate, mkState, type State } from "../model";
 
 const DB_NAME = "live-score";
