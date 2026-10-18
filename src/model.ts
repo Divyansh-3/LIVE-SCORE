@@ -125,6 +125,7 @@ export interface State {
   rev: number;
   custom: Preset | null;
   anim: boolean;
+  autoAdv?: boolean;
 }
 
 export const STYLE: Style = {

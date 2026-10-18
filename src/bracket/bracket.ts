@@ -1,9 +1,3 @@
-// Bracket logic. Every bracket SCREEN (a page with kind 'bracket') owns its own bracket, so you can have several.
-// A bracket slot never stores scores – it only points at an existing Match (matchId),
-// so the normal score controls and the overlay keep working unchanged.
-//   • createBracket(): automatic single-elimination for 2/4/8/16 teams (rounds are NOT named – you type the names)
-//   • startManual() + addRound/addSlot/setNext/…: build it yourself, step by step, with NO preset names or tags
-// All functions that take (d, pid, …) mutate the draft state d; pid = the id of the bracket screen.
 import {
   mkMatch,
   uid,

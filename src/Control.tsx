@@ -5,6 +5,8 @@ import SchedulePanel from "./schedule/SchedulePanel";
 import { champion } from "./table/table";
 import { STAGES } from "./bracket/bracket";
 import { loadOrInit, saveState } from "./storage/db";
+import { useAutoBackup } from "./storage/backup";
+import { AUTO_MS, advance, canAdvance, cdToggle, seriesWinner } from "./series";
 import { closePublisher, publish, subscribe } from "./storage/sync";
 import {
   PRESETS,
@@ -216,6 +218,87 @@ export default function Control() {
   const air = (id: string | null) =>
     setSt((s) => s && { ...s, airId: id, rev: s.rev + 1 });
 
+  // ---- Undo / redo: a stack of earlier states (max 30 steps / ~120 MB) ----
+  const hist = useRef({
+    past: [] as { s: State; n: number }[],
+    future: [] as { s: State; n: number }[],
+    t: 0,
+  });
+  const record = (s: State, solo?: boolean) => {
+    const h = hist.current;
+    if (h.past[h.past.length - 1]?.s === s) return;
+    h.future = [];
+    const t = Date.now();
+    // a quick burst of edits (typing, dragging a number) = ONE undo step; scores always get their own step
+    if (!solo && h.past.length && t - h.t < 500) {
+      h.t = t;
+      return;
+    }
+    h.t = t;
+    h.past.push({ s, n: JSON.stringify(s).length });
+    let bytes = h.past.reduce((a, x) => a + x.n, 0);
+    while (h.past.length > 30 || (bytes > 120e6 && h.past.length > 1))
+      bytes -= h.past.shift()!.n;
+  };
+  /** Apply an edit. f may return false to cancel. skip = not undoable (timers). solo = always its own undo step. */
+  const up = (
+    f: (d: State) => void | false,
+    o?: { skip?: boolean; solo?: boolean },
+  ) =>
+    setSt((s) => {
+      if (!s) return s;
+      const d = structuredClone(s);
+      if (f(d) === false) return s;
+      d.rev = s.rev + 1;
+      if (!o?.skip) record(s, o?.solo);
+      return d;
+    });
+  /** Undo/redo must never change what is ON AIR or running timers, so those are kept from the live state. */
+  const restore = (to: State, cur: State): State => ({
+    ...to,
+    rev: cur.rev + 1,
+    anim: cur.anim,
+    autoAdv: cur.autoAdv,
+    airId:
+      cur.airId === null || to.pages.some((x) => x.id === cur.airId)
+        ? cur.airId
+        : to.airId,
+    pages: to.pages.map((pg) => {
+      const c = cur.pages.find((x) => x.id === pg.id);
+      return c ? { ...pg, scene: { ...pg.scene, cd: c.scene.cd } } : pg;
+    }),
+  });
+  const undo = () =>
+    setSt((s) => {
+      const e = hist.current.past.pop();
+      if (!s || !e) return s;
+      hist.current.future.push({ s, n: 0 });
+      return restore(e.s, s);
+    });
+  const redo = () =>
+    setSt((s) => {
+      const e = hist.current.future.pop();
+      if (!s || !e) return s;
+      hist.current.past.push({ s, n: JSON.stringify(s).length });
+      return restore(e.s, s);
+    });
+  /** Replace the whole tournament (import / reset) – still undoable. */
+  const replace = (v: State) =>
+    setSt((s) => {
+      if (!s) return { ...v, rev: 1 };
+      record(s, true);
+      return { ...v, rev: s.rev + 1 };
+    });
+  const score = (t: "a" | "b", n: number) =>
+    up(
+      (d) => {
+        const m = d.matches.find((x) => x.id === d.curId) || d.matches[0];
+        m[t].score = Math.max(0, m[t].score + n);
+      },
+      { solo: true },
+    );
+  const bk = useAutoBackup(() => stRef.current, memOnly);
+
   // Load (or create on first launch) the tournament from IndexedDB
   useEffect(() => {
     loadOrInit()
@@ -289,6 +372,53 @@ export default function Control() {
     addEventListener("keydown", h);
     return () => removeEventListener("keydown", h);
   }, [st]);
+  // Live shortcuts (ignored while typing in a field):
+  //   ← / →  +1 for team A / B   ·  Shift+← / Shift+→  −1   ·  Space  start/pause the on-air countdown
+  //   Ctrl+Z undo  ·  Ctrl+Y or Ctrl+Shift+Z redo  ·  Enter  finish the won series and go to the next match
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (/INPUT|TEXTAREA|SELECT/.test(el.tagName) || el.isContentEditable)
+        return;
+      const k = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && (k === "z" || k === "y")) {
+        e.preventDefault();
+        if (k === "y" || e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (k === "arrowleft" || k === "arrowright") {
+        e.preventDefault();
+        score(k === "arrowleft" ? "a" : "b", e.shiftKey ? -1 : 1);
+      } else if (e.key === " ") {
+        e.preventDefault();
+        if (el.tagName === "BUTTON") el.blur(); // so Space never "clicks" the last-used button
+        up(
+          (d) => {
+            const pg = d.pages.find((x) => x.id === d.airId);
+            if (!pg || !pg.showCd) return false;
+            cdToggle(pg.scene.cd);
+          },
+          { skip: true },
+        );
+      } else if (e.key === "Enter" && el === document.body) {
+        up(advance, { solo: true });
+      }
+    };
+    addEventListener("keydown", h);
+    return () => removeEventListener("keydown", h);
+  }, []);
+  // Auto-advance: when the current series is won, wait a few seconds (so viewers see the final score), then move on.
+  const curM = st ? st.matches.find((x) => x.id === st.curId) : undefined;
+  const sig = curM
+    ? `${curM.id}|${curM.a.score}|${curM.b.score}|${curM.fmt}`
+    : "";
+  useEffect(() => {
+    if (!st?.autoAdv || !curM || !seriesWinner(curM)) return;
+    const t = setTimeout(() => up(advance, { solo: true }), AUTO_MS);
+    return () => clearTimeout(t);
+  }, [st?.autoAdv, sig]);
   if (!st)
     return (
       <div className="cp">
@@ -319,15 +449,9 @@ export default function Control() {
       </div>
     );
 
-  const up = (f: (d: State) => void) =>
-    setSt((s) => {
-      const d = structuredClone(s!);
-      f(d);
-      d.rev = s!.rev + 1;
-      return d;
-    });
   const p = st.pages.find((x) => x.id === sel) || st.pages[0];
   const cur = st.matches.find((x) => x.id === st.curId) || st.matches[0];
+  const win = seriesWinner(cur);
   const em = st.matches.find((x) => x.id === msel) || cur;
   const EM = (d: State) => d.matches.find((x) => x.id === em.id)!;
   const mname = (m: Match) => `${m.a.name} vs ${m.b.name}`;
@@ -411,41 +535,39 @@ export default function Control() {
 
   const run = !!sc.cd.endsAt && sc.cd.endsAt > now;
   const act = (a: string, v = 0) =>
-    up((d) => {
-      const c = PP(d).scene.cd,
-        l = cdLeft(c),
-        r = !!c.endsAt && c.endsAt > Date.now();
-      if (a === "start" && !r) {
-        const t = l > 0 ? l : c.total;
-        c.left = t;
-        c.endsAt = Date.now() + t;
-      } else if (a === "pause") {
-        c.left = l;
-        c.endsAt = null;
-      } else if (a === "reset") {
-        c.left = c.total;
-        c.endsAt = null;
-      } else if (a === "add") {
-        if (r) c.endsAt = Math.max(Date.now(), c.endsAt! + v);
-        else {
-          c.left = Math.max(0, l + v);
+    up(
+      (d) => {
+        const c = PP(d).scene.cd,
+          l = cdLeft(c),
+          r = !!c.endsAt && c.endsAt > Date.now();
+        if (a === "start" && !r) {
+          const t = l > 0 ? l : c.total;
+          c.left = t;
+          c.endsAt = Date.now() + t;
+        } else if (a === "pause") {
+          c.left = l;
+          c.endsAt = null;
+        } else if (a === "reset") {
+          c.left = c.total;
+          c.endsAt = null;
+        } else if (a === "add") {
+          if (r) c.endsAt = Math.max(Date.now(), c.endsAt! + v);
+          else {
+            c.left = Math.max(0, l + v);
+            c.endsAt = null;
+          }
+        } else if (a === "until") {
+          c.total = v;
+          c.left = v;
+          c.endsAt = Date.now() + v;
+        } else if (a === "set") {
+          c.total = v;
+          c.left = v;
           c.endsAt = null;
         }
-      } else if (a === "until") {
-        c.total = v;
-        c.left = v;
-        c.endsAt = Date.now() + v;
-      } else if (a === "set") {
-        c.total = v;
-        c.left = v;
-        c.endsAt = null;
-      }
-    });
-  const score = (t: "a" | "b", n: number) =>
-    up((d) => {
-      const m = d.matches.find((x) => x.id === d.curId) || d.matches[0];
-      m[t].score = Math.max(0, m[t].score + n);
-    });
+      },
+      { skip: true },
+    );
   const setT = (t: "a" | "b", f: (x: Team) => void) => up((d) => f(EM(d)[t]));
   const add = () => {
     const np = mkPage("Break " + shown.length);
@@ -609,7 +731,7 @@ export default function Control() {
     ask(
       "Loading a backup replaces ALL current tournament data (export one first if unsure). Continue?",
       () => {
-        setSt({ ...v, rev: (stRef.current?.rev ?? 0) + 1 });
+        replace(v);
         setSel(v.airId || v.pages[0].id);
       },
     );
@@ -728,6 +850,20 @@ export default function Control() {
           )}
         </div>
         <button onClick={() => air(null)}>Hide overlay (key 0)</button>
+        <button
+          onClick={undo}
+          disabled={!hist.current.past.length}
+          title="Undo (Ctrl+Z)"
+        >
+          ↶ Undo
+        </button>
+        <button
+          onClick={redo}
+          disabled={!hist.current.future.length}
+          title="Redo (Ctrl+Y)"
+        >
+          ↷ Redo
+        </button>
         <span className="hint">
           {saveErr ? (
             <b style={{ color: "#ff6b6b" }}>⚠ NOT SAVED: {saveErr}</b>
@@ -763,6 +899,18 @@ export default function Control() {
                 })
               }
             />
+            <Chk
+              l="Auto-advance finished series"
+              v={!!st.autoAdv}
+              set={(v) =>
+                up(
+                  (d) => {
+                    d.autoAdv = v;
+                  },
+                  { skip: true },
+                )
+              }
+            />
             <div className="btns">
               <button onClick={exp}>Save configuration</button>
               <label>
@@ -789,7 +937,7 @@ export default function Control() {
                     "Reset EVERYTHING to defaults? All matches, pages and images will be erased.",
                     () => {
                       const v = mkState();
-                      setSt({ ...v, rev: st.rev + 1 });
+                      replace(v);
                       setSel(v.airId!);
                     },
                   )
@@ -798,6 +946,45 @@ export default function Control() {
                 Reset everything
               </button>
             </div>
+            <h3>AUTO BACKUP</h3>
+            {bk.perm === "unsupported" ? (
+              <p className="hint">
+                This browser cannot write to a folder. Use Chrome or Edge, or
+                press “Save configuration” regularly.
+              </p>
+            ) : (
+              <>
+                <p className="hint">
+                  {bk.name
+                    ? `Folder: ${bk.name}. Saved a minute after any change, plus a dated copy every 30 min (last 12 kept).`
+                    : "Pick a folder once. Your whole tournament is then saved there automatically, even if browser data is cleared."}
+                </p>
+                <div className="btns">
+                  <button className="go" onClick={bk.pick}>
+                    {bk.name ? "Change folder" : "Choose backup folder"}
+                  </button>
+                  {bk.perm === "ask" && (
+                    <button className="go" onClick={bk.resume}>
+                      Resume backups
+                    </button>
+                  )}
+                  {bk.perm === "ok" && (
+                    <button onClick={bk.now}>Back up now</button>
+                  )}
+                </div>
+                <p className="hint">
+                  {bk.err ? (
+                    <b style={{ color: "#ff6b6b" }}>⚠ {bk.err}</b>
+                  ) : bk.perm === "ask" ? (
+                    "⚠ Backups are paused until you click Resume."
+                  ) : bk.last ? (
+                    `✅ Last backup ${bk.last.toLocaleTimeString()}`
+                  ) : (
+                    ""
+                  )}
+                </p>
+              </>
+            )}
           </div>
         </details>
       </div>
@@ -828,8 +1015,22 @@ export default function Control() {
           Reset scores
         </button>
         <button onClick={nextM}>Next match →</button>
+        {win && canAdvance(st) && (
+          <div className="adv">
+            🏆 <b>{cur[win].name}</b> wins {cur.a.score}–{cur.b.score}
+            <button className="go" onClick={() => up(advance, { solo: true })}>
+              Finish &amp; next match ↵
+            </button>
+            {st.autoAdv && (
+              <span className="hint">
+                auto in {Math.round(AUTO_MS / 1000)} s — undo cancels it
+              </span>
+            )}
+          </div>
+        )}
         <span className="hint">
-          Scores belong to this match and show on every page.
+          Scores belong to this match and show on every page. Keys: ← → score
+          (Shift = −1) · Space timer · Ctrl+Z / Ctrl+Y undo · 0–9 pages
         </span>
       </div>
 

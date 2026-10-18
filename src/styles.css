@@ -678,3 +678,14 @@ body {
     grid-column: 1 / -1;
   }
 }
+/* ---- Series finished: "Finish & next match" prompt in the score strip ---- */
+.adv {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 4px 10px;
+  background: #1c1608;
+  border: 1px solid var(--amber);
+  border-radius: var(--radius);
+}
