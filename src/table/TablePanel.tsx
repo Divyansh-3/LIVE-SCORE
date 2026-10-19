@@ -27,6 +27,18 @@ const LABEL: Record<Status, string> = {
   pending: "PENDING",
 };
 
+type Result = "a" | "b" | "d" | null;
+
+// a = team A wins, b = team B wins, d = draw, null = not played yet
+const resultOf = (m: { sa: number | null; sb: number | null }): Result =>
+  m.sa === null || m.sb === null
+    ? null
+    : m.sa > m.sb
+      ? "a"
+      : m.sa < m.sb
+        ? "b"
+        : "d";
+
 export default function TablePanel({ st, pid, up, ask, say }: Props) {
   const t = st.pages.find((x) => x.id === pid)?.table ?? null;
   const [name, setName] = useState("Group A"),
@@ -146,10 +158,25 @@ export default function TablePanel({ st, pid, up, ask, say }: Props) {
       .filter((k, i, a) => a.indexOf(k) !== i),
   );
   const target = newN || t.teams.length;
-  const setScore = (id: string, k: "sa" | "sb", v: string) =>
+
+  // Click a result to set it. Click the active one again to clear it.
+  const setResult = (id: string, r: "a" | "b" | "d") =>
     edit((x) => {
       const m = x.matches.find((y) => y.id === id);
-      if (m) m[k] = v === "" ? null : Math.max(0, Math.floor(+v) || 0);
+      if (!m) return;
+      if (resultOf(m) === r) {
+        m.sa = null;
+        m.sb = null;
+      } else if (r === "a") {
+        m.sa = 1;
+        m.sb = 0;
+      } else if (r === "b") {
+        m.sa = 0;
+        m.sb = 1;
+      } else {
+        m.sa = 0;
+        m.sb = 0;
+      }
     });
 
   return (
@@ -238,7 +265,7 @@ export default function TablePanel({ st, pid, up, ask, say }: Props) {
 
       <h3>MATCHES &amp; RESULTS</h3>
       <p className="hint">
-        Type both scores to complete a match. Leave a score empty to clear it.
+        Click the winner (or Draw) for each match. Click again to clear it.
       </p>
       {rounds.map((r) => {
         const ms = t.matches.filter((m) => m.round === r);
@@ -253,24 +280,36 @@ export default function TablePanel({ st, pid, up, ask, say }: Props) {
             </summary>
             {ms.map((m) => {
               const s = matchStatus(t, m);
+              const res = resultOf(m);
               return (
                 <div className="fx" key={m.id}>
                   <span className={"stt " + s}>{LABEL[s]}</span>
-                  <span className="fa">{nameOf(m.a)}</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={m.sa ?? ""}
-                    onChange={(e) => setScore(m.id, "sa", e.target.value)}
-                  />
-                  <span>–</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={m.sb ?? ""}
-                    onChange={(e) => setScore(m.id, "sb", e.target.value)}
-                  />
-                  <span className="fb">{nameOf(m.b)}</span>
+                  <button
+                    className={
+                      "res" +
+                      (res === "a" ? " on win" : res === "b" ? " on lose" : "")
+                    }
+                    onClick={() => setResult(m.id, "a")}
+                  >
+                    {nameOf(m.a)}
+                    {res === "a" ? " · WIN" : res === "b" ? " · LOSE" : ""}
+                  </button>
+                  <button
+                    className={"res" + (res === "d" ? " on draw" : "")}
+                    onClick={() => setResult(m.id, "d")}
+                  >
+                    Draw
+                  </button>
+                  <button
+                    className={
+                      "res" +
+                      (res === "b" ? " on win" : res === "a" ? " on lose" : "")
+                    }
+                    onClick={() => setResult(m.id, "b")}
+                  >
+                    {nameOf(m.b)}
+                    {res === "b" ? " · WIN" : res === "a" ? " · LOSE" : ""}
+                  </button>
                 </div>
               );
             })}

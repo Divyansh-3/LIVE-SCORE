@@ -159,9 +159,6 @@ export function createDoubleBracket(
         label: "",
       });
     }
-    const gfMatch = matches.find((x) => x.id === gf.matches[0].matchId);
-    if (gfMatch) gfMatch.fmt = "BO7"; // Grand Final
-
     return { id: uid(), name: rname, matches: ms };
   };
 
@@ -186,6 +183,10 @@ export function createDoubleBracket(
   );
   const gf = round(1, false, "Grand Final");
   Lo.push(gf);
+
+  // Grand Final is a best of 7 (set AFTER gf exists)
+  const gfMatch = matches.find((x) => x.id === gf.matches[0].matchId);
+  if (gfMatch) gfMatch.fmt = "BO7";
 
   // Upper wiring
   U.forEach((rd, r) =>

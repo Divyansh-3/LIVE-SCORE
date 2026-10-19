@@ -638,6 +638,77 @@ body {
   gap: 0 14px;
 }
 
+/* One match row: status | Team A | Draw | Team B */
+.rnd .fx {
+  display: grid;
+  grid-template-columns: 96px 1fr 90px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.rnd .fx .stt {
+  text-align: center;
+  font-size: 11px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.rnd .fx > .res {
+  width: 100%;
+  min-width: 0; /* lets long team names shrink instead of overflowing */
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  opacity: 0.8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    background 0.15s,
+    opacity 0.15s;
+}
+
+.rnd .fx > .res:hover {
+  opacity: 1;
+}
+
+.rnd .fx > .res.on {
+  opacity: 1;
+  font-weight: 700;
+}
+.rnd .fx > .res.win {
+  background: #1fa971;
+  border-color: #1fa971;
+  color: #fff;
+}
+.rnd .fx > .res.lose {
+  background: #7a2e2e;
+  border-color: #7a2e2e;
+  color: #fff;
+}
+.rnd .fx > .res.draw {
+  background: #b08a1e;
+  border-color: #b08a1e;
+  color: #fff;
+}
+
+/* Phones: stack Team A / Draw / Team B */
+@media (max-width: 560px) {
+  .rnd .fx {
+    grid-template-columns: 1fr;
+  }
+  .rnd .fx .stt {
+    justify-self: start;
+  }
+}
+
 /* today's matches editor */
 .fx2 {
   display: grid;
