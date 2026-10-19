@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { mkMatch, type Match, type State } from "../model";
+import { mkBracketPage, mkMatch, uid, type Match, type State } from "../model";
 import {
   STAGES,
   addRound,
@@ -7,6 +7,7 @@ import {
   clearRoundNames,
   completeMatch,
   createBracket,
+  createDoubleBracket,
   labelOf,
   linkPairs,
   removeRound,
@@ -44,9 +45,12 @@ export default function BracketPanel({
   say,
 }: Props) {
   const [size, setSize] = useState(8);
+  const [kind, setKind] = useState<"single" | "double">("single");
   const [tour, setTour] = useState(() =>
     baseTour(st.matches.find((x) => x.id === st.curId)?.tour),
   );
+  const sizes = kind === "double" ? [4, 8, 16] : [2, 4, 8, 16];
+  const useSize = Math.max(size, sizes[0]); // double elimination needs at least 4 teams
   const b = st.pages.find((x) => x.id === pid)?.bracket ?? null;
   const find = (id: string) => st.matches.find((x) => x.id === id);
   const allSlots = b ? b.rounds.flatMap((r) => r.matches) : [];
@@ -65,9 +69,36 @@ export default function BracketPanel({
 
   const createAuto = () => {
     const go = () => {
-      const made = createBracket(size, tour.trim() || "TOURNAMENT");
+      const tn = tour.trim() || "TOURNAMENT";
+      if (kind === "single") {
+        const made = createBracket(useSize, tn);
+        up((d) => {
+          setBracket(d, pid, made.bracket);
+          d.matches.push(...made.matches);
+        });
+        return;
+      }
+      // double elimination: this screen becomes the Upper Bracket, a new screen holds the Lower Bracket + Grand Final
+      const lowerPage = mkBracketPage(uid(), "Lower Bracket");
+      const made = createDoubleBracket(useSize, tn, lowerPage.id);
+      lowerPage.bracket = made.lower;
       up((d) => {
-        setBracket(d, pid, made.bracket);
+        const i = d.pages.findIndex((x) => x.id === pid);
+        if (i < 0) return;
+        const upper = d.pages[i];
+        // the Lower Bracket screen starts with the same look as the Upper one
+        lowerPage.scene.style = structuredClone(upper.scene.style);
+        lowerPage.scene.bg = upper.scene.bg;
+        lowerPage.scene.bgSize = upper.scene.bgSize;
+        lowerPage.scene.bgX = upper.scene.bgX;
+        lowerPage.scene.bgY = upper.scene.bgY;
+        lowerPage.banner = upper.banner;
+        lowerPage.showBoard = upper.showBoard;
+        lowerPage.title = "LOWER BRACKET";
+        upper.bracket = made.upper;
+        upper.name = "Upper Bracket";
+        upper.title = "UPPER BRACKET";
+        d.pages.splice(i + 1, 0, lowerPage);
         d.matches.push(...made.matches);
       });
     };
@@ -122,7 +153,7 @@ export default function BracketPanel({
   const autoForm = (
     <details style={{ marginTop: 14 }}>
       <summary>
-        Advanced: auto-advancing bracket for 2 / 4 / 8 / 16 teams
+        Advanced: auto-advancing bracket (normal or upper / lower)
       </summary>
       <p className="hint">
         Builds the rounds and matches for you, without naming the rounds (you
@@ -133,9 +164,19 @@ export default function BracketPanel({
         <input value={tour} onChange={(e) => setTour(e.target.value)} />
       </div>
       <div className="btns">
+        Type:{" "}
+        <select
+          value={kind}
+          onChange={(e) => setKind(e.target.value as "single" | "double")}
+        >
+          <option value="single">Normal bracket (single elimination)</option>
+          <option value="double">
+            Upper + Lower bracket (double elimination)
+          </option>
+        </select>
         Teams:{" "}
-        <select value={size} onChange={(e) => setSize(+e.target.value)}>
-          {[2, 4, 8, 16].map((n) => (
+        <select value={useSize} onChange={(e) => setSize(+e.target.value)}>
+          {sizes.map((n) => (
             <option key={n}>{n}</option>
           ))}
         </select>
@@ -143,6 +184,14 @@ export default function BracketPanel({
           Create automatic bracket
         </button>
       </div>
+      {kind === "double" && (
+        <p className="hint">
+          This screen becomes the <b>Upper Bracket</b> and a new{" "}
+          <b>Lower Bracket</b> screen is added (it also holds the Grand Final).
+          “Complete &amp; advance” sends winners forward and losers down to the
+          lower bracket, even across screens.
+        </p>
+      )}
     </details>
   );
 
@@ -227,6 +276,22 @@ export default function BracketPanel({
                   <div className="bmh">
                     <b>{labelOf(b, bm.id)}</b>
                     {bm.completed && <span className="tag n">DONE</span>}
+                    {bm.loserTo && (
+                      <span
+                        className="tag n"
+                        title="The loser drops to the lower bracket"
+                      >
+                        ↓ loser drops
+                      </span>
+                    )}
+                    {bm.winnerTo && (
+                      <span
+                        className="tag n"
+                        title="The winner goes to the Grand Final on another screen"
+                      >
+                        → Grand Final
+                      </span>
+                    )}
                     <span style={{ flex: 1 }} />
                     <button
                       className="danger"
@@ -277,7 +342,11 @@ export default function BracketPanel({
                       run((d) => setNext(d, pid, bm.id, e.target.value || null))
                     }
                   >
-                    <option value="">Winner goes to… (nowhere)</option>
+                    <option value="">
+                      {bm.winnerTo
+                        ? "Winner goes to… (another screen)"
+                        : "Winner goes to… (nowhere)"}
+                    </option>
                     {b.rounds.slice(r + 1).flatMap((rr) =>
                       rr.matches.map((t) => {
                         const tm = find(t.matchId);

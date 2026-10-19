@@ -51,7 +51,7 @@ export interface Match {
   a: Team;
   b: Team;
   tour: string;
-  fmt: "BO1" | "BO3" | "BO5";
+  fmt: "BO1" | "BO3" | "BO5" | "BO7";
 }
 export interface TableTeam {
   id: string;
@@ -85,6 +85,7 @@ export interface Page {
   bracket?: Bracket | null;
   kind?: "bracket" | "banner" | "table" | "schedule";
   fit?: "cover" | "contain";
+  combined?: boolean;
   id: string;
   name: string;
   title: string;
@@ -101,12 +102,21 @@ export interface Preset {
   style: Partial<Style>;
   layout?: Record<string, El>;
 }
+/** A link to a slot that can live on ANOTHER bracket screen (used by double elimination). */
+export interface Link {
+  pid: string; // page (bracket screen) that holds the target slot
+  bmId: string; // target slot id
+  slot: "a" | "b"; // which team position of the target match to fill
+}
 export interface BracketMatch {
   id: string;
   matchId: string;
   nextMatchId: string | null;
   completed: boolean;
   label: string;
+  nextSlot?: "a" | "b"; // optional: force which team slot the winner takes in nextMatchId
+  winnerTo?: Link; // optional: winner goes to a slot on another screen
+  loserTo?: Link; // optional: loser drops to a slot (double elimination)
 }
 export interface BracketRound {
   id: string;

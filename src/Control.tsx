@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import BracketPanel from "./bracket/BracketPanel";
 import TablePanel from "./table/TablePanel";
 import SchedulePanel from "./schedule/SchedulePanel";
+import ThemePicker from "./theme/themePicker";
+import Welcome, { welcomeSeen } from "./Welcome";
 import { champion } from "./table/table";
 import { STAGES } from "./bracket/bracket";
 import { loadOrInit, saveState } from "./storage/db";
@@ -213,6 +215,8 @@ export default function Control() {
   );
   const say = (msg: string) => setDlg({ msg });
   const ask = (msg: string, yes: () => void) => setDlg({ msg, yes });
+  // First-run welcome box (shown once per browser)
+  const [welcome, setWelcome] = useState(() => !welcomeSeen());
   const stRef = useRef<State | null>(null),
     savedRev = useRef(-1);
   const air = (id: string | null) =>
@@ -808,6 +812,7 @@ export default function Control() {
 
   return (
     <div className="cp">
+      {welcome && <Welcome onClose={() => setWelcome(false)} />}
       {dlg && (
         <div className="dlg">
           <div className="dlgbox">
@@ -930,6 +935,7 @@ export default function Control() {
                   }
                 />
               </label>
+              <button onClick={() => setWelcome(true)}>Welcome / help</button>
               <button
                 className="danger"
                 onClick={() =>
@@ -946,6 +952,7 @@ export default function Control() {
                 Reset everything
               </button>
             </div>
+            <ThemePicker />
             <h3>AUTO BACKUP</h3>
             {bk.perm === "unsupported" ? (
               <p className="hint">
@@ -1600,6 +1607,7 @@ export default function Control() {
                   <option>BO1</option>
                   <option>BO3</option>
                   <option>BO5</option>
+                  <option>BO7</option>
                 </select>
               </div>
               <div className="txt">
@@ -1694,6 +1702,19 @@ export default function Control() {
                   })
                 }
               />
+              {p.bracket?.rounds.some((r) =>
+                r.matches.some((m) => m.loserTo),
+              ) && (
+                <Chk
+                  l="Show Upper + Lower together on this screen"
+                  v={p.combined !== false}
+                  set={(v) =>
+                    setP((x) => {
+                      x.combined = v;
+                    })
+                  }
+                />
+              )}
               <Img
                 l="Banner (only this screen)"
                 v={p.banner}
