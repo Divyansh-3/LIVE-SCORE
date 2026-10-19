@@ -50,7 +50,11 @@ It has two parts: a **Control panel** where you manage teams, scores, matches, c
 
 ## 📸 Screenshots
 
-<img width="1920" height="940" alt="Screenshot_20261019_111222" src="https://github.com/user-attachments/assets/c5856428-943d-4971-a153-8e2c1619cf15" />
+<img width="1920" height="940" alt="Screenshot_20261019_111222" src="https://github.com/user-attachments/assets/c5856428-943d-4971-a153-8e2c1619cf15" /> 
+<img width="1920" height="947" alt="Screenshot_20261019_111355" src="https://github.com/user-attachments/assets/e720e296-1e2a-4f9d-bda2-29c1894d8dc2" />
+<img width="1917" height="935" alt="Screenshot_20261019_111321" src="https://github.com/user-attachments/assets/21551aac-490f-4c7c-8cdd-9e10dca34e71" />
+<img width="1691" height="949" alt="Screenshot_20261019_111246" src="https://github.com/user-attachments/assets/58d9f4de-127f-44b1-9f0c-b89e145dbef9" />
+
 
 
 ### Control panel
