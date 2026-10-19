@@ -1,25 +1,33 @@
-/* ---------------------------------------------------------------------
-   1. BASE
-   --------------------------------------------------------------------- */
 html,
 body {
   margin: 0;
-  background: transparent; /* keeps OBS see-through */
+  background: transparent;
 }
-
 * {
   box-sizing: border-box;
 }
 
-/* Full-window wrapper: transparent, never scrolls */
+/* default theme (Matrix Green). themes.ts overrides these on <html> */
+:root {
+  --bg: #040a06;
+  --surface: #07110b;
+  --surface-2: #0d2016;
+  --border: #12301d;
+  --text: #e2f6ea;
+  --text-muted: #7ba88b;
+  --accent: #22e67a;
+  --accent-2: #b4ff5c;
+  --on-accent: #021208;
+  --accent-rgb: 34, 230, 122;
+}
+
+/* overlay (what OBS sees) */
 .ovr {
   position: fixed;
   inset: 0;
   overflow: hidden;
   background: transparent;
 }
-
-/* The 1920×1080 canvas, centred and scaled */
 .stage {
   position: absolute;
   left: 50%;
@@ -28,20 +36,14 @@ body {
   height: 1080px;
   transform-origin: center;
 }
-
-/* One page; re-created (and fades in) every time the page changes */
 .scene {
   position: absolute;
   inset: 0;
   animation: fade 0.45s ease;
 }
-
-/* Images placed freely on the stage (background, banner) */
 .abs {
   position: absolute;
 }
-
-/* Any text element positioned by the Position & size tab */
 .el {
   position: absolute;
   white-space: nowrap;
@@ -49,21 +51,16 @@ body {
   text-transform: uppercase;
 }
 
-/* --- Scoreboard card: [logo] NAME  1 — 0  NAME [logo] --- */
 .card {
   display: flex;
   align-items: center;
   gap: 0.5em;
   padding: 0.3em 0.8em;
 }
-
 .vs {
-  /* the score between the two names */
   font-size: 1em;
   padding: 0 0.3em;
 }
-
-/* Placeholder shown when a team has no logo (shows its short name) */
 .badge {
   display: grid;
   place-items: center;
@@ -72,13 +69,10 @@ body {
   font-weight: 800;
 }
 
-/* --- Animations --- */
 .pop {
-  /* score changes */
   display: inline-block;
   animation: pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1);
 }
-
 @keyframes fade {
   from {
     opacity: 0;
@@ -95,32 +89,34 @@ body {
   to {
     opacity: 0.3;
   }
-} /* countdown reaches 00:00 */
+}
 
-/* "Animations" switch turned off in the control panel */
 .noanim,
 .noanim * {
   animation: none !important;
   transition: none !important;
 }
 
-/* ---------------------------------------------------------------------
-   3. CONTROL PANEL
-   Layout: top bar + score strip on top, then three columns that each scroll on
-   their own:  lists (left) | editor (middle) | live previews (right).
-   --------------------------------------------------------------------- */
+/* control panel */
 .cp {
-  --bg: #0b0f19; /* page background */
-  --surface: #111827; /* inputs, popups */
-  --card: #0e1526; /* panels and cards */
-  --line: #1f2a48; /* thin borders */
-  --line-hi: #2b3a63; /* input / button borders */
-  --text: #dfe6f3;
-  --muted: #7f8fb0;
-  --accent: #00e5ff; /* cyan highlight */
-  --green: #12b76a; /* main action buttons */
-  --red: #ff3d6e; /* ON AIR */
-  --amber: #ffb020; /* CURRENT match */
+  /* everything below is built from the 9 theme colours */
+  --card: var(--surface);
+  --pop: var(--surface-2);
+  --line: var(--border);
+  --line-hi: color-mix(in srgb, var(--border) 70%, var(--text));
+  --muted: var(--text-muted);
+  --label: color-mix(in srgb, var(--text-muted), var(--text) 35%);
+  --btn: var(--surface-2);
+  --btn-hi: color-mix(in srgb, var(--surface-2), var(--text) 12%);
+  --sel: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  --go: var(--accent); /* main buttons */
+  --air: var(--accent-2); /* on air */
+  --cur: color-mix(in srgb, var(--accent) 70%, var(--bg)); /* current / done */
+  --sky: color-mix(
+    in srgb,
+    var(--accent),
+    var(--text) 45%
+  ); /* winner, leader */
   --radius: 8px;
 
   display: flex;
@@ -137,7 +133,6 @@ body {
     sans-serif;
 }
 
-/* ---- Headings & small text ---- */
 .cp h3 {
   margin: 16px 0 6px;
   font-size: 12px;
@@ -152,11 +147,11 @@ body {
   color: var(--muted);
 }
 
-/* ---- Buttons ---- */
+/* buttons */
 .cp button {
   min-height: 30px;
   padding: 4px 11px;
-  background: #18213a;
+  background: var(--btn);
   color: var(--text);
   border: 1px solid var(--line-hi);
   border-radius: 6px;
@@ -167,7 +162,7 @@ body {
     border-color 0.15s;
 }
 .cp button:hover {
-  background: #22305a;
+  background: var(--btn-hi);
 }
 .cp button:active {
   transform: translateY(1px);
@@ -179,37 +174,38 @@ body {
 .cp button.on {
   background: var(--accent);
   border-color: var(--accent);
-  color: #001018;
+  color: var(--on-accent);
   font-weight: 600;
-} /* selected tab */
+}
 .cp button.go {
-  background: var(--green);
-  border-color: var(--green);
-  color: #001a0d;
+  background: var(--go);
+  border-color: var(--go);
+  color: var(--on-accent);
   font-weight: 700;
-} /* main action */
+}
 .cp button.go:hover {
   filter: brightness(1.1);
 }
 .cp button.danger {
-  border-color: #8f3340;
+  border-color: color-mix(in srgb, var(--accent-2) 60%, var(--bg));
+  color: var(--accent-2);
 }
 .cp button.danger:hover {
-  background: #4a1f2a;
+  background: color-mix(in srgb, var(--accent-2) 16%, var(--bg));
 }
 .cp :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 
-/* ---- Inputs ---- */
+/* inputs */
 .cp input,
 .cp select {
   min-width: 0;
   min-height: 30px;
   padding: 4px 8px;
-  background: var(--surface);
-  color: #fff;
+  background: var(--pop);
+  color: var(--text);
   border: 1px solid var(--line-hi);
   border-radius: 6px;
   font: inherit;
@@ -226,7 +222,7 @@ body {
   padding: 2px;
 }
 
-/* ---- Form rows ---- */
+/* form rows */
 .num,
 .txt {
   display: flex;
@@ -237,14 +233,13 @@ body {
 .num > span,
 .txt > span {
   min-width: 104px;
-  color: #9fb0d0;
-} /* label */
+  color: var(--label);
+}
 .txt input {
   flex: 1;
 }
 
 .btns {
-  /* a row of buttons */
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -253,13 +248,12 @@ body {
 }
 
 .row {
-  /* one line in "Position & size" */
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 14px;
   padding: 6px 0;
-  border-bottom: 1px solid #151d33;
+  border-bottom: 1px solid var(--line);
 }
 .row > b {
   width: 150px;
@@ -267,7 +261,6 @@ body {
 }
 
 .box {
-  /* framed group, e.g. one team */
   margin: 10px 0;
   padding: 4px 12px 8px;
   background: var(--card);
@@ -275,7 +268,7 @@ body {
   border-radius: var(--radius);
 }
 
-/* ---- Top bar ---- */
+/* top bar */
 .top {
   display: flex;
   flex: 0 0 auto;
@@ -286,15 +279,14 @@ body {
   border-bottom: 1px solid var(--line);
 }
 .onair {
-  /* "ON OBS NOW: …" */
   padding: 5px 12px;
-  background: #101a30;
+  background: var(--sel);
   border: 1px solid var(--line-hi);
   border-radius: 999px;
 }
 .menu {
   position: relative;
-} /* ⚙ Backup & settings dropdown */
+}
 .menu summary {
   padding: 5px 12px;
   border: 1px solid var(--line-hi);
@@ -307,14 +299,48 @@ body {
   top: 36px;
   z-index: 5;
   width: 340px;
+  max-height: 80vh;
   padding: 12px;
-  background: var(--surface);
+  overflow-y: auto;
+  background: var(--pop);
   border: 1px solid var(--line-hi);
   border-radius: var(--radius);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
-/* ---- Score strip (always visible under the top bar) ---- */
+/* theme picker (inside the settings menu) */
+.themes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 6px 0;
+}
+.cp button.theme {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 34px;
+  padding: 4px 8px;
+  text-align: left;
+  font-size: 13px;
+  border-width: 2px;
+}
+.cp button.theme:hover {
+  filter: brightness(1.15);
+}
+.cp button.theme.picked {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.theme i {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-left: 3px;
+  border-radius: 50%;
+}
+
+/* score strip */
 .strip {
   display: flex;
   flex: 0 0 auto;
@@ -331,7 +357,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-} /* one team's score controls */
+}
 .nm {
   min-width: 150px;
   font-weight: 600;
@@ -341,7 +367,7 @@ body {
   font-size: 30px;
 }
 
-/* ---- Three columns, each scrolls on its own ---- */
+/* 3 columns: lists | editor | previews */
 .grid {
   display: grid;
   flex: 1 1 0;
@@ -361,9 +387,8 @@ body {
 .grid > :last-child {
   position: static !important;
   align-self: stretch !important;
-} /* previews: no sticky needed */
+}
 
-/* Left column: a divider line between its sections */
 .grid > :first-child h3 {
   margin: 22px 0 6px;
   padding-top: 14px;
@@ -375,10 +400,8 @@ body {
   border-top: 0;
 }
 
-/* ---- List cards (matches, pages, brackets, tables, schedules) ----
-   Line 1: number/icon + name.   Line 2: action buttons, always on the right. */
+/* list cards (matches, pages, brackets...) */
 .mlist {
-  /* scrollable match list */
   max-height: 290px;
   padding-right: 4px;
   overflow: auto;
@@ -409,12 +432,11 @@ body {
   color: var(--accent);
 }
 .pg > div {
-  /* name + small info; takes the whole first line */
   flex: 1 1 calc(100% - 44px);
   min-width: 0;
   font-weight: 600;
   line-height: 1.25;
-  overflow-wrap: break-word; /* wrap by WORD, never letter by letter */
+  overflow-wrap: break-word;
 }
 .pg small {
   display: block;
@@ -424,7 +446,7 @@ body {
 }
 .pg > div + * {
   margin-left: auto;
-} /* first action pushes all actions to the right */
+}
 .pg button {
   min-height: 28px;
   padding: 3px 12px;
@@ -433,37 +455,35 @@ body {
 .pg button[title] {
   width: 30px;
   padding: 0;
-} /* ⧉ and ✕ are square icon buttons */
+}
 .pg.sel {
-  background: #101a30;
+  background: var(--sel);
   border-color: var(--accent);
-} /* being edited */
+}
 .pg.sel:hover {
   border-color: var(--accent);
 }
 .pg.air {
-  box-shadow: 0 0 0 1px var(--red);
-} /* page on OBS */
+  box-shadow: 0 0 0 1px var(--air);
+}
 .pg.cur {
-  box-shadow: 0 0 0 1px var(--amber);
-} /* current match */
+  box-shadow: 0 0 0 1px var(--cur);
+}
 
 .tag {
-  /* ON AIR / CURRENT badge */
   padding: 2px 7px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.4px;
-  color: #fff;
-  background: var(--red);
+  color: var(--bg);
+  background: var(--air);
   border-radius: 4px;
 }
 .tag.n {
-  color: #000;
-  background: var(--amber);
+  color: var(--on-accent);
+  background: var(--cur);
 }
 
-/* ---- Countdown readout ---- */
 .big {
   margin: 4px 0;
   font-size: 34px;
@@ -471,7 +491,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- Live previews: a 1920×1080 iframe shrunk to 440×247 ---- */
+/* previews: 1920x1080 iframe scaled to 440 wide */
 .pv {
   position: relative;
   width: 440px;
@@ -480,17 +500,17 @@ body {
   overflow: hidden;
   border: 1px solid var(--line-hi);
   border-radius: 6px;
-  background: repeating-conic-gradient(#222 0 25%, #333 0 50%) 0 0 / 20px 20px; /* checkerboard = transparent */
+  background: repeating-conic-gradient(#222 0 25%, #333 0 50%) 0 0 / 20px 20px;
 }
 .pv iframe {
   width: 1920px;
   height: 1080px;
   border: 0;
-  transform: scale(0.2292); /* 440 / 1920 */
+  transform: scale(0.2292);
   transform-origin: 0 0;
 }
 
-/* ---- Tournament bracket editor ---- */
+/* bracket editor */
 .rounds {
   display: flex;
   align-items: flex-start;
@@ -512,7 +532,7 @@ body {
   border-radius: var(--radius);
 }
 .bm.cur {
-  border-color: var(--amber);
+  border-color: var(--cur);
 }
 .bm.done {
   opacity: 0.75;
@@ -532,11 +552,11 @@ body {
   gap: 8px;
 }
 .bm .t.win {
-  color: var(--green);
+  color: var(--sky);
   font-weight: 700;
 }
 
-/* ---- Points table editor ---- */
+/* points table editor */
 .stand {
   width: 100%;
   border-collapse: collapse;
@@ -557,15 +577,14 @@ body {
 .stand th:nth-child(2) {
   text-align: left;
 }
-/* first place */
 .stand tr.leader td {
   font-weight: 600;
-  color: var(--green);
+  color: var(--sky);
 }
 .champ {
   padding: 8px 12px;
-  background: #1c1608;
-  border: 1px solid var(--amber);
+  background: var(--sel);
+  border: 1px solid var(--cur);
   border-radius: var(--radius);
 }
 .rnd {
@@ -598,20 +617,20 @@ body {
   font-size: 10px;
   text-align: center;
   color: var(--muted);
-  background: #1f2a48;
+  background: var(--line);
   border-radius: 3px;
 }
 .stt.completed {
-  color: #5ee6a0;
-  background: #0f3d27;
+  color: var(--sky);
+  background: color-mix(in srgb, var(--accent) 20%, var(--bg));
 }
 .stt.ongoing {
-  color: var(--amber);
-  background: #4a3406;
+  color: var(--on-accent);
+  background: var(--cur);
 }
 .stt.next {
   color: var(--accent);
-  background: #063a44;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg));
 }
 .teamgrid {
   display: grid;
@@ -619,7 +638,78 @@ body {
   gap: 0 14px;
 }
 
-/* ---- Today's matches editor ---- */
+/* One match row: status | Team A | Draw | Team B */
+.rnd .fx {
+  display: grid;
+  grid-template-columns: 96px 1fr 90px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.rnd .fx .stt {
+  text-align: center;
+  font-size: 11px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.rnd .fx > .res {
+  width: 100%;
+  min-width: 0; /* lets long team names shrink instead of overflowing */
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  opacity: 0.8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    background 0.15s,
+    opacity 0.15s;
+}
+
+.rnd .fx > .res:hover {
+  opacity: 1;
+}
+
+.rnd .fx > .res.on {
+  opacity: 1;
+  font-weight: 700;
+}
+.rnd .fx > .res.win {
+  background: #1fa971;
+  border-color: #1fa971;
+  color: #fff;
+}
+.rnd .fx > .res.lose {
+  background: #7a2e2e;
+  border-color: #7a2e2e;
+  color: #fff;
+}
+.rnd .fx > .res.draw {
+  background: #b08a1e;
+  border-color: #b08a1e;
+  color: #fff;
+}
+
+/* Phones: stack Team A / Draw / Team B */
+@media (max-width: 560px) {
+  .rnd .fx {
+    grid-template-columns: 1fr;
+  }
+  .rnd .fx .stt {
+    justify-self: start;
+  }
+}
+
+/* today's matches editor */
 .fx2 {
   display: grid;
   grid-template-columns: 130px minmax(0, 1fr) auto auto auto;
@@ -627,7 +717,7 @@ body {
   margin: 4px 0;
 }
 
-/* ---- In-page confirm / message dialog ---- */
+/* confirm / message dialog */
 .dlg {
   position: fixed;
   inset: 0;
@@ -639,13 +729,68 @@ body {
 .dlgbox {
   max-width: 460px;
   padding: 18px 22px;
-  background: var(--surface);
+  background: var(--pop);
   border: 1px solid var(--line-hi);
   border-radius: var(--radius);
   white-space: pre-line;
 }
 
-/* ---- Scrollbars: slim and dark ---- */
+/* "finish & next match" box in the score strip */
+.adv {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 4px 10px;
+  background: var(--sel);
+  border: 1px solid var(--cur);
+  border-radius: var(--radius);
+}
+
+/* first-run welcome box */
+.wel {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.75);
+}
+.welbox {
+  width: min(580px, calc(100vw - 32px));
+  max-height: 90vh;
+  padding: 20px 26px 16px;
+  overflow-y: auto;
+  background: var(--pop);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow:
+    0 0 28px rgba(var(--accent-rgb), 0.25),
+    0 14px 40px rgba(0, 0, 0, 0.6);
+}
+.welbox h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+  color: var(--accent);
+}
+.welbox p {
+  margin: 6px 0;
+}
+.welbox ol {
+  margin: 6px 0;
+  padding-left: 22px;
+}
+.welbox li {
+  margin: 4px 0;
+}
+.welbox a {
+  text-decoration: none;
+}
+.welbox h3 {
+  margin-top: 16px;
+}
+
+/* scrollbars */
 .cp,
 .cp * {
   scrollbar-width: thin;
@@ -660,7 +805,7 @@ body {
   border-radius: 4px;
 }
 
-/* ---- Narrower windows: the whole page scrolls, previews go under the editor ---- */
+/* small windows: page scrolls, previews drop under the editor */
 @media (max-width: 1400px) {
   .cp {
     display: block;

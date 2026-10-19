@@ -57,6 +57,11 @@ It has two parts: a **Control panel** where you manage teams, scores, matches, c
 <img width="1917" height="935" alt="Screenshot_20261019_111321" src="https://github.com/user-attachments/assets/21551aac-490f-4c7c-8cdd-9e10dca34e71" />
 <img width="1691" height="949" alt="Screenshot_20261019_111246" src="https://github.com/user-attachments/assets/58d9f4de-127f-44b1-9f0c-b89e145dbef9" />
 
+<<<<<<< HEAD
+
+
+=======
+>>>>>>> ce3b0b761e87ba6539ed9bd129863826c1bd5dba
 ### Control panel
 
 ![Control panel](docs/screenshots/control-panel.png)
@@ -131,6 +136,160 @@ npm run dev
 cd ~/Downloads/LIVE-SCORE-main/src
 npm install
 npm run dev
+<<<<<<< HEAD
+```
+
+(If you downloaded the ZIP from the terminal: `unzip LIVE-SCORE-main.zip`, then `cd LIVE-SCORE-main/src`.)
+
+#### Install from `requirements.txt` instead (optional)
+
+`requirements.txt` lists the exact versions of every package. `npm` cannot read that format directly, so these commands convert it for you. Run them inside `src`, **then** `npm run dev`:
+
+```powershell
+# Windows (PowerShell)
+npm install --no-save (Get-Content requirements.txt | ForEach-Object { $_ -replace '==','@' })
+```
+
+```bash
+# macOS / Linux
+npm install --no-save $(sed 's/==/@/' requirements.txt)
+```
+
+`--no-save` installs those exact versions without changing `package.json`.
+
+### 4. Open it
+
+Go to **<http://localhost:5173>** in Chrome or Edge.
+
+- **Keep the terminal window open while you stream.** Closing it stops the scoreboard.
+- **Next time**, you only need `npm run dev`: open a terminal in `src` and run it. `npm install` is only needed the first time.
+- `npm run dev` already locks the port to `5173` on purpose. Browsers keep your data per address, so if the port changed, your tournament would seem to disappear. If the port is busy, close the other copy of the app first.
+
+The first time you run it on your own computer, a step-by-step **Welcome guide** opens automatically. You can reopen it from **⚙ Backup & settings → Welcome / help**.
+
+---
+
+## 🎥 Using it with OBS Studio
+
+The app has two addresses on the same site:
+
+| Page        | Address                          | Purpose                        |
+| ----------- | -------------------------------- | ------------------------------ |
+| **Control** | `http://localhost:PORT/`         | Where you click and type       |
+| **Overlay** | `http://localhost:PORT/#overlay` | What viewers see (transparent) |
+
+The Control page shows the exact overlay link in the **"Paste in OBS"** box at the top.
+
+### Step 1: Add the overlay
+
+1. In OBS, under **Sources**, click **+ → Browser**.
+2. Name it "Scoreboard" and click OK.
+3. Paste the overlay link into **URL**.
+4. Set **Width 1920** and **Height 1080**.
+5. Leave **Custom CSS** unchanged. The background is already transparent.
+6. Click OK and place the source above your game capture.
+
+### Step 2: Open Control inside OBS (important)
+
+OBS Browser Sources use OBS's own built-in browser, which keeps its own separate storage. The overlay reads the data saved by the Control page, so **Control must run in the same OBS browser**, not in Chrome or Edge.
+
+1. In OBS, open **Docks → Custom Browser Docks…**
+2. Name it "Scoreboard Control" and paste the Control address (the same address as the overlay, without `#overlay`).
+3. Click **Apply**. The control panel now appears as a dock inside OBS.
+4. Run your whole show from that dock.
+
+> ⚠️ Use the **exact same address** for the dock and the overlay. `localhost` and `127.0.0.1` are treated as different sites with separate storage, so do not mix them.
+>
+> If you control the scoreboard from a normal Chrome or Edge window, the overlay in OBS will **not** update.
+
+In Streamlabs Desktop, use its custom browser dock option if your version has one.
+
+---
+
+## 🧠 How it works
+
+- **Matches** hold team names, logos, format (BO1–BO7), stage and the score. One match is the **current match**.
+- **Pages** are screens. Only one page is **on air** at a time, or none (overlay hidden).
+- The **score belongs to the match**, so it shows on every page that displays that match.
+- Every change is broadcast to the overlay within about 40 ms and saved to your browser's IndexedDB database shortly after.
+- The top bar always shows what OBS is displaying right now.
+
+---
+
+## 🔍 Detailed features
+
+### 🏆 Match management
+
+- Create as many matches as you need, and **duplicate**, **reorder** and **delete** them.
+- Click a match to edit it, and press **Make current** to put it on the scoreboard.
+- Prepare upcoming matches while the current one is being played. A warning shows when you are editing a match that is not on stream.
+- Per match: **tournament name**, **format** (BO1, BO3, BO5, BO7), **stage tag**, an optional **match banner**, and for each team a **name**, **short name** and **logo**.
+
+Example:
+
+```text
+Match 1   Phantom Wolves vs Shadow Force   BO3   Quarter Final
+Match 2   Team Alpha vs Team Omega         BO5   Semi Final
+Match 3   Team Red vs Team Blue            BO3   Grand Final
+```
+
+### 🔢 Scoring and series
+
+- **+1 / −1** buttons for each team in the strip at the top, always visible.
+- Keyboard scoring with the arrow keys (no mouse needed).
+- **Reset scores** and **Next match →** controls.
+- When a team wins the series (for example 2–0 in a BO3), a banner appears with **Finish & next match**. It moves on to the next match.
+- Optional **Auto-advance finished series**: waits a few seconds so viewers can see the final score, then moves on. Undo cancels it.
+- Scores can never go below 0.
+
+### 📄 Pages (break screens)
+
+Each page is a screen you can put on air. A normal page can show:
+
+- A **big title**, a **line above the timer**, and a **"when timer hits 0"** message
+- An **info line** (for example "Next map: Bind")
+- A **countdown** and/or a **scoreboard** (each can be switched on or off)
+- A **default banner** image
+- A **match shown** setting: follow the current match automatically, or lock the page to one specific match
+
+You can add, duplicate, reorder and delete pages. Pages are numbered, and the number keys put them on air.
+
+### 🖼️ Banner pages
+
+An **image-only** page that shows one picture and nothing else: no title, countdown or scoreboard. Choose **Fill the screen** (may crop) or **Show the whole image**, and use Position & size to move or resize it.
+
+### ⏱️ Countdown timers
+
+Every page that shows a countdown has its own timer:
+
+- **Start**, **Pause**, **Resume** and **Reset**
+- **+10s / −10s**, even while it is running
+- Quick presets: 00:30, 01:00, 02:00, 05:00
+- **Custom time** such as 03:30
+- **Count down to a clock time** (24-hour, for example 22:00 = 10 PM). If that time has already passed today, it counts to tomorrow.
+- **Space** starts or pauses the timer of the page that is on air
+
+### 🏆 Bracket screens
+
+- Add as many bracket screens as you need (Upper bracket, Lower bracket, Group A…).
+- Each screen has its own title, banner, layout and style.
+- Bracket slots are linked to your matches.
+- Option to **show scores** and, for double-elimination brackets, to **show Upper and Lower together** on one screen.
+- Deleting a match used by a bracket warns you first and leaves that slot empty until you pick another match.
+
+### 📊 Table screens
+
+- Group-stage tables with their own teams, fixtures and results.
+- Shows a **champion** when the table is complete.
+- The Control list shows progress such as "4 teams · 3/6 played".
+- Add as many as you need and **duplicate** a table (Group A → Group B) with one click.
+- Each table has its own title, banner, layout and style.
+
+### 🗓️ Today's matches screen
+
+A screen that lists the matches being played today, with a banner and **no timer**. Add several (Morning, Evening…) with their own titles, subtitles and an optional **show scores** setting.
+
+=======
 ```
 
 (If you downloaded the ZIP from the terminal: `unzip LIVE-SCORE-main.zip`, then `cd LIVE-SCORE-main/src`.)
@@ -424,6 +583,7 @@ Every page that shows a countdown has its own timer:
 
 A screen that lists the matches being played today, with a banner and **no timer**. Add several (Morning, Evening…) with their own titles, subtitles and an optional **show scores** setting.
 
+>>>>>>> ce3b0b761e87ba6539ed9bd129863826c1bd5dba
 ### 📐 Position and size
 
 - The canvas is **1920×1080**.
@@ -522,6 +682,10 @@ Shortcuts are ignored while you type in a text box.
 
 ## =======
 
+<<<<<<< HEAD
+---
+
+=======
 ## 4. The Control Panel tour
 
 ```
@@ -900,6 +1064,7 @@ both pages must run in the same browser profile, which in OBS means using a dock
 
 ## <<<<<<< feature/upcoming
 
+>>>>>>> ce3b0b761e87ba6539ed9bd129863826c1bd5dba
 ## 🔮 Future improvements
 
 - Automatic game result integration
@@ -919,6 +1084,11 @@ both pages must run in the same browser profile, which in OBS means using a dock
 
 =======
 
+<<<<<<< HEAD
+If you find a bug or have an idea for a new feature, feel free to [open an issue](https://github.com/Divyansh-3/LIVE-SCORE/issues/new) or submit a pull request.
+
+---
+=======
 ```
 State
 ├── pages[]      screens. Each Page has a scene (layout + style + background + timer) and,
@@ -931,6 +1101,7 @@ State
 ├── anim         animations on/off
 └── rev          revision number (newer wins; used for sync and saving)
 ```
+>>>>>>> ce3b0b761e87ba6539ed9bd129863826c1bd5dba
 
 Old saves are upgraded automatically on load (`migrate()`), including the earlier single-match
 format and the earlier single shared bracket.

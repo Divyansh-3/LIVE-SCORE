@@ -1,9 +1,3 @@
-// Bracket logic. Every bracket SCREEN (a page with kind 'bracket') owns its own bracket, so you can have several.
-// A bracket slot never stores scores – it only points at an existing Match (matchId),
-// so the normal score controls and the overlay keep working unchanged.
-//   • createBracket(): automatic single-elimination for 2/4/8/16 teams (rounds are NOT named – you type the names)
-//   • startManual() + addRound/addSlot/setNext/…: build it yourself, step by step, with NO preset names or tags
-// All functions that take (d, pid, …) mutate the draft state d; pid = the id of the bracket screen.
 import {
   mkMatch,
   uid,
@@ -11,9 +5,10 @@ import {
   type BracketMatch,
   type Match,
   type State,
+  type Team,
 } from "../model";
 
-const NEED = { BO1: 1, BO3: 2, BO5: 3 }; // wins needed to take the series
+const NEED = { BO1: 1, BO3: 2, BO5: 3, BO7: 4 }; // wins needed to take the series
 
 export const STAGES = [
   "Round of 32",
@@ -116,7 +111,134 @@ export function createBracket(
         bm.nextMatchId = rounds[r + 1].matches[i >> 1].id;
       });
   });
+
+  const last = rounds[rounds.length - 1].matches[0];
+  const fm = matches.find((x) => x.id === last.matchId);
+  if (fm) fm.fmt = "BO7"; // Final
+
   return { bracket: { format: "single-elimination", rounds }, matches };
+}
+
+// ---------------------------------------------------------------- automatic double elimination
+/**
+ * Double elimination for 4, 8 or 16 teams, split over TWO screens:
+ *  - upper  = the Upper Bracket (put it on the screen you are editing)
+ *  - lower  = the Lower Bracket, whose last round is the Grand Final
+ * lowerPid is the id of the page that will hold `lower` (needed for cross-screen links).
+ * Returns both brackets plus the NEW Match objects to add to state.matches.
+ */
+export function createDoubleBracket(
+  size: number,
+  tour: string,
+  lowerPid: string,
+): { upper: Bracket; lower: Bracket; matches: Match[] } {
+  const k = Math.log2(size);
+  const matches: Match[] = [];
+
+  const round = (count: number, first: boolean, rname: string) => {
+    const ms: BracketMatch[] = [];
+    for (let i = 0; i < count; i++) {
+      const m = mkMatch();
+      m.tour = tour;
+      m.stage = rname;
+      if (first) {
+        m.a.name = `TEAM ${2 * i + 1}`;
+        m.b.name = `TEAM ${2 * i + 2}`;
+        m.a.abbr = `T${2 * i + 1}`;
+        m.b.abbr = `T${2 * i + 2}`;
+      } else {
+        m.a.name = m.b.name = "TBD";
+        m.a.abbr = m.b.abbr = "TBD";
+      }
+      matches.push(m);
+      ms.push({
+        id: uid(),
+        matchId: m.id,
+        nextMatchId: null,
+        completed: false,
+        label: "",
+      });
+    }
+    return { id: uid(), name: rname, matches: ms };
+  };
+
+  // Round headings: "Upper Round 1", "Upper Semi Final", "Upper Final", "Lower Round 1", …, "Lower Final", "Grand Final"
+  const uName = (r: number) =>
+    r === k - 1
+      ? "Upper Final"
+      : r === k - 2 && k >= 3
+        ? "Upper Semi Final"
+        : `Upper Round ${r + 1}`;
+  const lName = (t: number, last: number) =>
+    t === last ? "Lower Final" : `Lower Round ${t + 1}`;
+
+  // Upper: size/2, size/4, … 1 matches
+  const U = Array.from({ length: k }, (_, r) =>
+    round(size / 2 ** (r + 1), r === 0, uName(r)),
+  );
+  // Lower: 2(k-1) rounds with sizes size/4, size/4, size/8, size/8, … then the Grand Final
+  const L = 2 * (k - 1);
+  const Lo = Array.from({ length: L }, (_, t) =>
+    round(size / 2 ** (Math.floor((t + 2) / 2) + 1), false, lName(t, L - 1)),
+  );
+  const gf = round(1, false, "Grand Final");
+  Lo.push(gf);
+
+  // Grand Final is a best of 7 (set AFTER gf exists)
+  const gfMatch = matches.find((x) => x.id === gf.matches[0].matchId);
+  if (gfMatch) gfMatch.fmt = "BO7";
+
+  // Upper wiring
+  U.forEach((rd, r) =>
+    rd.matches.forEach((bm, i) => {
+      if (r < k - 1) {
+        bm.nextMatchId = U[r + 1].matches[i >> 1].id;
+        bm.nextSlot = i % 2 === 0 ? "a" : "b";
+      }
+      // losers drop into the lower bracket
+      if (r === 0) {
+        bm.loserTo = {
+          pid: lowerPid,
+          bmId: Lo[0].matches[i >> 1].id,
+          slot: i % 2 === 0 ? "a" : "b",
+        };
+      } else {
+        bm.loserTo = {
+          pid: lowerPid,
+          bmId: Lo[2 * r - 1].matches[i].id,
+          slot: "b",
+        };
+      }
+    }),
+  );
+  // upper final winner → Grand Final (team A)
+  U[k - 1].matches[0].winnerTo = {
+    pid: lowerPid,
+    bmId: gf.matches[0].id,
+    slot: "a",
+  };
+
+  // Lower wiring
+  Lo.slice(0, L).forEach((rd, t) =>
+    rd.matches.forEach((bm, i) => {
+      if (t % 2 === 0) {
+        bm.nextMatchId = Lo[t + 1].matches[i].id; // same index; the upper loser fills slot B
+        bm.nextSlot = "a";
+      } else if (t < L - 1) {
+        bm.nextMatchId = Lo[t + 1].matches[i >> 1].id;
+        bm.nextSlot = i % 2 === 0 ? "a" : "b";
+      } else {
+        bm.nextMatchId = gf.matches[0].id; // lower final winner → Grand Final (team B)
+        bm.nextSlot = "b";
+      }
+    }),
+  );
+
+  return {
+    upper: { format: "double-elimination", rounds: U },
+    lower: { format: "double-elimination", rounds: Lo },
+    matches,
+  };
 }
 
 // ---------------------------------------------------------------- manual bracket
@@ -227,6 +349,8 @@ export function setNext(
       return "That match already has two matches feeding it.";
   }
   from.bm.nextMatchId = next;
+  from.bm.nextSlot = undefined; // manual choice: slot is decided by feeder order again
+  from.bm.winnerTo = undefined; // and any cross-screen link is dropped
 }
 
 /** Sends the winners of a round to the next round two-by-two: 1st+2nd → first match, 3rd+4th → second … */
@@ -239,6 +363,8 @@ export function linkPairs(d: State, pid: string, rid: string): string | void {
   b.rounds[r].matches.forEach((bm, i) => {
     const t = nx.matches[i >> 1];
     bm.nextMatchId = t ? t.id : null;
+    bm.nextSlot = undefined;
+    bm.winnerTo = undefined;
   });
 }
 
@@ -270,7 +396,32 @@ export interface Result {
   canForce?: boolean;
 }
 
-/** Marks a slot complete and moves the winner into the slot it points to (mutates the draft state d). */
+/** Puts a team into a slot of a match (on this or another bracket screen) without overwriting a real team. */
+function placeTeam(
+  d: State,
+  pid: string,
+  bmId: string,
+  slot: "a" | "b",
+  team: Team,
+): string {
+  const b = bkOf(d, pid),
+    t = b && locate(b, bmId);
+  if (!b || !t) return "A target slot no longer exists, so nobody was placed.";
+  const pageName = d.pages.find((p) => p.id === pid)?.name ?? "";
+  const where = `${pageName ? pageName + " – " : ""}${labelOf(b, bmId)}`;
+  const nm = d.matches.find((x) => x.id === t.bm.matchId);
+  if (!nm) return `${where} has no linked match, so nobody was placed.`;
+  const cur = nm[slot];
+  if (!cur.name || cur.name === "TBD") {
+    nm[slot] = { ...structuredClone(team), score: 0 };
+    return `${team.name} goes to ${where}.`;
+  }
+  if (cur.name === team.name)
+    return `${team.name} was already placed in ${where}.`;
+  return `⚠ ${where} already has "${cur.name}" in that slot, so it was NOT overwritten. Edit it manually if needed.`;
+}
+
+/** Marks a slot complete, moves the winner (and the loser, in double elimination). Mutates the draft state d. */
 export function completeMatch(
   d: State,
   pid: string,
@@ -293,30 +444,28 @@ export function completeMatch(
       canForce: m.a.score !== m.b.score,
       note: `No winner yet: a team needs ${NEED[m.fmt]} win(s) in a ${m.fmt}.`,
     };
+  const l = w === "a" ? "b" : "a";
 
   loc.bm.completed = true;
-  const next = loc.bm.nextMatchId ? locate(b, loc.bm.nextMatchId) : null;
-  if (!next) return { ok: true, note: `🏆 ${m[w].name} wins!` };
-  const nm = d.matches.find((x) => x.id === next.bm.matchId);
-  const where = labelOf(b, next.bm.id);
-  if (!nm)
-    return {
-      ok: true,
-      note: `${where} has no linked match, so nobody was placed.`,
-    };
+  const notes: string[] = [];
 
-  const slot = feedersOf(b, next.bm.id).indexOf(loc.bm) % 2 === 0 ? "a" : "b"; // first feeder → team A, second → team B
-  const cur = nm[slot];
-  if (!cur.name || cur.name === "TBD") {
-    nm[slot] = { ...structuredClone(m[w]), score: 0 };
-    return { ok: true, note: `${m[w].name} advances to ${where}.` };
+  if (loc.bm.winnerTo) {
+    const t = loc.bm.winnerTo;
+    notes.push(placeTeam(d, t.pid, t.bmId, t.slot, m[w]));
+  } else if (loc.bm.nextMatchId) {
+    // forced slot (double elimination) or first feeder → team A, second feeder → team B
+    const slot =
+      loc.bm.nextSlot ??
+      (feedersOf(b, loc.bm.nextMatchId).indexOf(loc.bm) % 2 === 0 ? "a" : "b");
+    notes.push(placeTeam(d, pid, loc.bm.nextMatchId, slot, m[w]));
+  } else {
+    notes.push(`🏆 ${m[w].name} wins!`);
   }
-  if (cur.name === m[w].name)
-    return { ok: true, note: `${m[w].name} was already placed in ${where}.` };
-  return {
-    ok: true,
-    note: `⚠ ${where} already has "${cur.name}" in that slot, so it was NOT overwritten. Edit it manually if needed.`,
-  };
+  if (loc.bm.loserTo) {
+    const t = loc.bm.loserTo;
+    notes.push(placeTeam(d, t.pid, t.bmId, t.slot, m[l]));
+  }
+  return { ok: true, note: notes.join("\n") };
 }
 
 export function reopenMatch(d: State, pid: string, id: string): void {

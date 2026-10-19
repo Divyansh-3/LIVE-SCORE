@@ -1,11 +1,19 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { cdLeft, fmtT, rgba, useNow, type Match, type Style } from "./model";
+import {
+  cdLeft,
+  fmtT,
+  rgba,
+  useNow,
+  type Bracket,
+  type Match,
+  type Style,
+} from "./model";
 import { useSharedState } from "./storage/sync";
 import { stageColumns, winnerOf } from "./bracket/bracket";
 import { isComplete, standings } from "./table/table";
 
 const CENTER = new Set(["btitle", "bsub", "cd", "board", "binfo"]);
-const FMT = { BO1: "BEST OF 1", BO3: "BEST OF 3", BO5: "BEST OF 5" };
+const FMT = { BO1: "BEST OF 1", BO3: "BEST OF 3", BO5: "BEST OF 5", BO7: "BEST OF 7"};
 
 function Logo({
   src,
@@ -104,37 +112,384 @@ export default function Overlay() {
     opacity: s.opacity,
     "--accent": s.accent,
   } as CSSProperties;
-  const bn = p.kind ? p.banner : mt.banner || p.banner; // bracket / banner / table screens use their OWN banner     // the bracket screen has its OWN banner
+  const bn = p.kind ? p.banner : mt.banner || p.banner; // bracket / banner / table screens use their OWN banner
   const ls = (L.board?.s || 48) * 1.4;
   const blink = done ? { animation: "blink .6s 4 alternate" } : {};
 
   // ---- bracket screen: one column per stage, connector lines between columns ----
   // Source: the generated (auto-advancing) bracket if one exists, otherwise your matches grouped by their stage tag.
+  // Double elimination: the Upper Bracket screen can show the Lower Bracket underneath it (page.combined !== false).
   const bracketView = (() => {
     const B = L.board;
     if (p.kind !== "bracket" || !B || B.on === false) return null;
     type Item = { key: string; next?: string | null; m: Match; done: boolean };
+    type Col = { id: string; name: string; items: Item[] };
     const find = (id: string) => st.matches.find((x) => x.id === id);
-    // Generated/manual bracket: columns = its rounds, links = each slot's "winner goes to".
-    // No bracket: your matches grouped by their optional stage tag (links only when a column halves).
-    const cols: { id: string; name: string; items: Item[] }[] = p.bracket
-      ? p.bracket.rounds.map((rd, r) => ({
-          id: rd.id,
-          name: rd.name,
-          items: rd.matches.flatMap((bm) => {
-            const m = find(bm.matchId);
-            return m
-              ? [{ key: bm.id, next: bm.nextMatchId, m, done: bm.completed }]
-              : [];
-          }),
-        }))
-      : stageColumns(st.matches).map((c) => ({
-          id: c.name,
-          name: c.name,
-          items: c.matches.map((m) => ({ key: m.id, m, done: !!winnerOf(m) })),
-        }));
-    const shown = cols.filter((c) => c.items.length);
-    if (!shown.length)
+
+    // columns of one bracket (or, with no bracket, of the matches grouped by stage tag); empty columns are dropped
+    const colsOf = (br: Bracket | null): Col[] =>
+      (br
+        ? br.rounds.map((rd) => ({
+            id: rd.id,
+            name: rd.name,
+            items: rd.matches.flatMap((bm) => {
+              const m = find(bm.matchId);
+              return m
+                ? [{ key: bm.id, next: bm.nextMatchId, m, done: bm.completed }]
+                : [];
+            }),
+          }))
+        : stageColumns(st.matches).map((c) => ({
+            id: c.name,
+            name: c.name,
+            items: c.matches.map((m) => ({
+              key: m.id,
+              m,
+              done: !!winnerOf(m),
+            })),
+          }))
+      ).filter((c) => c.items.length);
+
+    // is there a Lower Bracket screen linked to this one (via the losers' links)?
+    const lowerPid = p.bracket?.rounds
+      .flatMap((r) => r.matches)
+      .find((m) => m.loserTo)?.loserTo?.pid;
+    const lowerBr = lowerPid
+      ? (st.pages.find((x) => x.id === lowerPid)?.bracket ?? null)
+      : null;
+
+    const W = B.w ?? 1920 - 2 * B.x,
+      H = B.h || 800;
+
+    // text colour on the winner's score box: dark on a light accent, white on a dark one
+    const ac = parseInt(s.accent.slice(1), 16);
+    const lum =
+      (0.299 * (ac >> 16) + 0.587 * ((ac >> 8) & 255) + 0.114 * (ac & 255)) /
+      255;
+    const onAcc = lum > 0.6 ? "#0a0e1a" : "#ffffff";
+    const dim = "rgba(255,255,255,.45)";
+
+    /** Draws ONE bracket (lines + round headings + match cards) inside a W×H area. startN = first match number. */
+    const draw = (
+      br: Bracket | null,
+      cols: Col[],
+      W: number,
+      H: number,
+      startN: number,
+    ) => {
+      const R = cols.length;
+      // narrow cards spread across the whole width (like a real tournament bracket)
+      const cardW = Math.min(B.s * 11, W / (R * 1.5));
+      const pitch = R > 1 ? (W - cardW) / (R - 1) : 0;
+      const numW = B.s * 1.3; // room in front of each card for its match number
+      const maxN = Math.max(...cols.map((c) => c.items.length));
+      const cardH = Math.min(B.s * 3.1, (H / maxN) * 0.9);
+      const fz = Math.min(B.s * 0.75, cardH * 0.26);
+      const cx = (r: number) => r * pitch;
+      const cy = (r: number, i: number) =>
+        ((i + 0.5) * H) / cols[r].items.length;
+      const pos = new Map<string, [number, number]>();
+      cols.forEach((c, r) =>
+        c.items.forEach((it, i) => pos.set(it.key, [r, i])),
+      );
+      const num = new Map<string, number>();
+      let n = startN;
+      cols.forEach((c) => c.items.forEach((it) => num.set(it.key, ++n)));
+      // each link remembers if its source match is finished (finished = bright line)
+      const links: {
+        from: [number, number];
+        to: [number, number];
+        done: boolean;
+      }[] = [];
+      cols.forEach((c, r) =>
+        c.items.forEach((it, i) => {
+          if (br) {
+            const t = it.next ? pos.get(it.next) : undefined;
+            if (t && t[0] > r)
+              links.push({ from: [r, i], to: t, done: it.done });
+          } else if (
+            cols[r + 1] &&
+            cols[r + 1].items.length * 2 === c.items.length
+          )
+            links.push({ from: [r, i], to: [r + 1, i >> 1], done: it.done });
+        }),
+      );
+      return (
+        <>
+          {/* CONNECTOR LINES: dark outline + accent line + dot where the line reaches the next match */}
+          <svg
+            width={W}
+            height={H}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              overflow: "visible",
+            }}
+          >
+            {links.map((l, k) => {
+              const x1 = cx(l.from[0]) + cardW,
+                y1 = cy(l.from[0], l.from[1]),
+                x2 = cx(l.to[0]) - numW,
+                y2 = cy(l.to[0], l.to[1]),
+                mx = x1 + (x2 - x1) / 2,
+                d = `M${x1} ${y1}H${mx}V${y2}H${x2}`,
+                lw = l.done ? 4.5 : 3.5;
+              return (
+                <g key={k}>
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke="rgba(0,0,0,.55)"
+                    strokeWidth={lw + 4}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke={s.accent}
+                    strokeOpacity={l.done ? 1 : 0.7}
+                    strokeWidth={lw}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={
+                      l.done
+                        ? { filter: `drop-shadow(0 0 6px ${s.accent})` }
+                        : undefined
+                    }
+                  />
+                  <circle
+                    cx={x2}
+                    cy={y2}
+                    r={lw + 1.5}
+                    fill={s.accent}
+                    fillOpacity={l.done ? 1 : 0.7}
+                  />
+                </g>
+              );
+            })}
+          </svg>
+          {cols.map((c, r) => (
+            <div key={c.id}>
+              {c.name && (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: cx(r),
+                    top: -B.s * 2.3,
+                    width: cardW,
+                    height: B.s * 1.5,
+                    display: "grid",
+                    placeItems: "center",
+                    padding: "0 .6em",
+                    overflow: "hidden",
+                    whiteSpace: "nowrap",
+                    textOverflow: "ellipsis",
+                    textTransform: "none",
+                    background: "rgba(255,255,255,.08)",
+                    borderRadius: 6,
+                    color: dim,
+                    fontSize: B.s * 0.6,
+                    letterSpacing: ".3px",
+                  }}
+                >
+                  {c.name}
+                </div>
+              )}
+              {c.items.map((it, i) => {
+                const m = it.m,
+                  w = it.done ? winnerOf(m, true) : null,
+                  top = cy(r, i) - cardH / 2;
+                return (
+                  <div key={it.key}>
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: cx(r) - numW,
+                        top,
+                        width: numW,
+                        height: cardH,
+                        display: "grid",
+                        placeItems: "center",
+                        fontSize: fz * 0.75,
+                        color: dim,
+                        textShadow: "none",
+                      }}
+                    >
+                      {num.get(it.key)}
+                    </div>
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: cx(r),
+                        top,
+                        width: cardW,
+                        height: cardH,
+                        display: "flex",
+                        flexDirection: "column",
+                        overflow: "hidden",
+                        fontSize: fz,
+                        background: rgba(s.panel, s.panelA),
+                        border: `1px solid ${m.id === st.curId ? s.accent : "rgba(255,255,255,.1)"}`,
+                        borderRadius: Math.min(s.radius, 6),
+                        boxShadow: "0 4px 14px rgba(0,0,0,.45)",
+                      }}
+                    >
+                      {(["a", "b"] as const).map((t, ti) => {
+                        const tm = m[t],
+                          win = w === t,
+                          lose = !!w && !win;
+                        return (
+                          <div
+                            key={t}
+                            style={{
+                              flex: "1 1 0",
+                              minHeight: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: ".5em",
+                              paddingLeft: ".5em",
+                              color: s.nameC,
+                              borderTop:
+                                ti === 1
+                                  ? "1px solid rgba(255,255,255,.08)"
+                                  : undefined,
+                            }}
+                          >
+                            {tm.logo ? (
+                              <img
+                                src={tm.logo}
+                                style={{
+                                  width: fz * 1.6,
+                                  height: fz * 1.6,
+                                  objectFit: "contain",
+                                  opacity: lose ? 0.45 : 1,
+                                }}
+                              />
+                            ) : (
+                              <span
+                                style={{
+                                  flex: "0 0 auto",
+                                  width: fz * 1.6,
+                                  height: fz * 1.6,
+                                  display: "grid",
+                                  placeItems: "center",
+                                  fontSize: fz * 0.55,
+                                  fontWeight: 800,
+                                  color: dim,
+                                  background: "rgba(255,255,255,.1)",
+                                  borderRadius: 4,
+                                  textShadow: "none",
+                                }}
+                              >
+                                {tm.abbr}
+                              </span>
+                            )}
+                            <span
+                              style={{
+                                flex: "1 1 0",
+                                minWidth: 0,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                textTransform: "none",
+                                textShadow: "none",
+                                opacity: lose ? 0.45 : 1,
+                              }}
+                            >
+                              {tm.name}
+                            </span>
+                            {p.showBoard && (
+                              <b
+                                style={{
+                                  alignSelf: "stretch",
+                                  minWidth: fz * 1.9,
+                                  display: "grid",
+                                  placeItems: "center",
+                                  textShadow: "none",
+                                  background: win
+                                    ? s.accent
+                                    : "rgba(255,255,255,.08)",
+                                  color: win ? onAcc : "rgba(255,255,255,.75)",
+                                }}
+                              >
+                                {tm.score}
+                              </b>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </>
+      );
+    };
+
+    const upCols = colsOf(p.bracket ?? null);
+
+    // ---- combined view: Upper Bracket on top, Lower Bracket (with Grand Final) underneath ----
+    const loCols = lowerBr ? colsOf(lowerBr) : [];
+    if (p.combined !== false && lowerBr && upCols.length && loCols.length) {
+      const hs = B.s * 4.6, // space above each section for its heading + round headings
+        avail = H - 2 * hs,
+        hu = avail * 0.56,
+        hl = avail - hu;
+      const nUp = upCols.reduce((a, c) => a + c.items.length, 0);
+      const label = (txt: string, top: number) => (
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            top,
+            width: W,
+            textAlign: "center",
+            fontSize: B.s * 0.95,
+            color: s.accent,
+            letterSpacing: "2px",
+          }}
+        >
+          {txt}
+        </div>
+      );
+      return E(
+        "board",
+        <>
+          {label("UPPER BRACKET", hs - B.s * 4.3)}
+          <div
+            style={{
+              position: "absolute",
+              left: 0,
+              top: hs,
+              width: W,
+              height: hu,
+            }}
+          >
+            {draw(p.bracket ?? null, upCols, W, hu, 0)}
+          </div>
+          {label("LOWER BRACKET", hs + hu + hs - B.s * 4.3)}
+          <div
+            style={{
+              position: "absolute",
+              left: 0,
+              top: hs + hu + hs,
+              width: W,
+              height: hl,
+            }}
+          >
+            {draw(lowerBr, loCols, W, hl, nUp)}
+          </div>
+        </>,
+        { width: W, height: H, transform: "none" },
+      );
+    }
+
+    // ---- single bracket view (normal bracket, Lower Bracket screen on its own, or combined switched off) ----
+    if (!upCols.length)
       return E(
         "board",
         p.bracket
@@ -142,128 +497,11 @@ export default function Overlay() {
           : "Give your matches a stage tag (Quarter Final, Semi Final…)",
         { transform: "none" },
       );
-    cols.length = 0;
-    cols.push(...shown);
-    const W = B.w ?? 1920 - 2 * B.x,
-      H = B.h || 800,
-      R = cols.length;
-    const gap = Math.min(110, W / (R * 4)),
-      colW = (W - gap * (R - 1)) / R;
-    const cardH = Math.min(
-      B.s * 3.1,
-      (H / Math.max(...cols.map((c) => c.items.length))) * 0.9,
-    );
-    const cx = (r: number) => r * (colW + gap);
-    const cy = (r: number, i: number) => ((i + 0.5) * H) / cols[r].items.length;
-    const pos = new Map<string, [number, number]>();
-    cols.forEach((c, r) => c.items.forEach((it, i) => pos.set(it.key, [r, i])));
-    const links: { from: [number, number]; to: [number, number] }[] = [];
-    cols.forEach((c, r) =>
-      c.items.forEach((it, i) => {
-        if (p.bracket) {
-          const t = it.next ? pos.get(it.next) : undefined;
-          if (t && t[0] > r) links.push({ from: [r, i], to: t });
-        } else if (
-          cols[r + 1] &&
-          cols[r + 1].items.length * 2 === c.items.length
-        )
-          links.push({ from: [r, i], to: [r + 1, i >> 1] });
-      }),
-    );
-    return E(
-      "board",
-      <>
-        <svg
-          width={W}
-          height={H}
-          style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}
-        >
-          {links.map((l, k) => {
-            const x1 = cx(l.from[0]) + colW,
-              y1 = cy(l.from[0], l.from[1]),
-              x2 = cx(l.to[0]),
-              y2 = cy(l.to[0], l.to[1]),
-              mx = x1 + gap / 2;
-            return (
-              <path
-                key={k}
-                d={`M${x1} ${y1}H${mx}V${y2}H${x2}`}
-                fill="none"
-                stroke={s.accent}
-                strokeOpacity=".6"
-                strokeWidth="3"
-              />
-            );
-          })}
-        </svg>
-        {cols.map((c, r) => (
-          <div key={c.id}>
-            {c.name && (
-              <div
-                style={{
-                  position: "absolute",
-                  left: cx(r),
-                  top: -B.s * 1.7,
-                  width: colW,
-                  textAlign: "center",
-                  color: s.accent,
-                  fontSize: B.s * 0.8,
-                }}
-              >
-                {c.name}
-              </div>
-            )}
-            {c.items.map((it, i) => {
-              const m = it.m,
-                w = it.done ? winnerOf(m, true) : null;
-              return (
-                <div
-                  key={it.key}
-                  style={{
-                    position: "absolute",
-                    left: cx(r),
-                    top: cy(r, i) - cardH / 2,
-                    width: colW,
-                    height: cardH,
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "center",
-                    padding: "0 .5em",
-                    ...box,
-                    borderColor: m.id === st.curId ? s.scoreC : s.accent,
-                  }}
-                >
-                  {(["a", "b"] as const).map((t) => (
-                    <div
-                      key={t}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: ".5em",
-                        color:
-                          w === t
-                            ? s.scoreC
-                            : w
-                              ? "rgba(255,255,255,.45)"
-                              : s.nameC,
-                      }}
-                    >
-                      <span
-                        style={{ overflow: "hidden", textOverflow: "ellipsis" }}
-                      >
-                        {m[t].name}
-                      </span>
-                      {p.showBoard && <b>{m[t].score}</b>}
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        ))}
-      </>,
-      { width: W, height: H, transform: "none" },
-    ); // 'none': positioned from its top-left, NOT centred
+    return E("board", draw(p.bracket ?? null, upCols, W, H, 0), {
+      width: W,
+      height: H,
+      transform: "none",
+    }); // 'none': positioned from its top-left, NOT centred
   })();
 
   // ---- points table screen: rank, team, P W D L, +/-, PTS (text shrinks to fit the Height you set) ----

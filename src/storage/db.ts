@@ -42,6 +42,21 @@ async function get<T>(key: string): Promise<T | undefined> {
   });
 }
 
+/** Small key-value helpers for other settings (e.g. the backup folder handle). */
+export async function kvGet<T>(key: string): Promise<T | undefined> {
+  return get<T>(key);
+}
+export async function kvSet(key: string, value: unknown): Promise<void> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(STORE, "readwrite");
+    t.objectStore(STORE).put(value, key);
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
+}
+
 /** Writes state + revision in ONE transaction (both succeed or neither does). Resolves when durably committed. */
 export async function saveState(s: State): Promise<void> {
   const db = await initDB();

@@ -1,6 +1,3 @@
-// Points-table (league / round-robin) logic. Pure functions, no UI.
-// Every team plays every other team once (or twice for "double round-robin").
-// The supported sizes are all even, so nobody ever sits out: there are no byes in a round-robin.
 import { uid, type LeagueTable, type TableMatch } from "../model";
 
 export const TABLE_SIZES = [4, 6, 8, 10, 12, 14, 16];
