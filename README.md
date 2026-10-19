@@ -49,7 +49,10 @@ It has two parts: a **Control panel** where you manage teams, scores, matches, c
 ---
 
 ## 📸 Screenshots
-![alt text](image.png) ![alt text](image-1.png) ![alt text](image-2.png) ![alt text](image-3.png) ![alt text](image-4.png) ![alt text](image-5.png)
+
+<img width="1920" height="940" alt="Screenshot_20261019_111222" src="https://github.com/user-attachments/assets/c5856428-943d-4971-a153-8e2c1619cf15" />
+
+
 ### Control panel
 
 ![Control panel](docs/screenshots/control-panel.png)
