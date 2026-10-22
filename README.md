@@ -1025,7 +1025,6 @@ lives in the browser, with two native APIs:
 Vite only serves the frontend. The trade-off is the one explained in [section 2](#2-setting-it-up-in-obs-read-this):
 both pages must run in the same browser profile, which in OBS means using a dock.
 
-> > > > > > > main
 
 ### Data model (`src/model.ts`)
 
@@ -1049,13 +1048,12 @@ both pages must run in the same browser profile, which in OBS means using a dock
 
 ## 🤝 Contributing
 
-=======
 
-<<<<<<< HEAD
+
 If you find a bug or have an idea for a new feature, feel free to [open an issue](https://github.com/Divyansh-3/LIVE-SCORE/issues/new) or submit a pull request.
 
 ---
-=======
+
 ```
 State
 ├── pages[]      screens. Each Page has a scene (layout + style + background + timer) and,
@@ -1068,7 +1066,6 @@ State
 ├── anim         animations on/off
 └── rev          revision number (newer wins; used for sync and saving)
 ```
->>>>>>> ce3b0b761e87ba6539ed9bd129863826c1bd5dba
 
 Old saves are upgraded automatically on load (`migrate()`), including the earlier single-match
 format and the earlier single shared bracket.
@@ -1080,7 +1077,6 @@ resizing the source keeps proportions. Elements are absolutely positioned from t
 _Position & size_. Which screen it draws is `airId`. A preview URL such as
 `/#overlay&page=<screen id>` draws a specific screen (this is how the editor preview works).
 
-> > > > > > > main
 
 ---
 
@@ -1089,11 +1085,9 @@ If you find a bug or have an idea for a new feature, feel free to [open an issue
 
 ---
 
-=======
 
 ## 16. Development
 
-> > > > > > > main
 
 ```bash
 npm install
