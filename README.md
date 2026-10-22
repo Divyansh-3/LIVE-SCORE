@@ -123,7 +123,6 @@ npm run dev
 cd ~/Downloads/LIVE-SCORE-main/src
 npm install
 npm run dev
-<<<<<<< HEAD
 ```
 
 (If you downloaded the ZIP from the terminal: `unzip LIVE-SCORE-main.zip`, then `cd LIVE-SCORE-main/src`.)
