@@ -1,12 +1,8 @@
-<<<<<<< feature/upcoming
-
 # 🎮 Esports Scoreboard Overlay
 
 A customizable **esports scoreboard and broadcast overlay** for **OBS Studio, Streamlabs Desktop and YouTube/Twitch live streaming**.
 
 It has two parts: a **Control panel** where you manage teams, scores, matches, countdowns, pages, brackets, tables and styling, and a clean, transparent **Overlay** that OBS shows on stream. It runs entirely on your own computer, with no account and no paid service.
-
----
 
 ## 📑 Table of contents
 
@@ -24,8 +20,6 @@ It has two parts: a **Control panel** where you manage teams, scores, matches, c
 - [Future improvements](#-future-improvements)
 - [Contributing](#-contributing)
 - [License](#-license)
-
----
 
 ## ✨ Features at a glance
 
@@ -48,7 +42,6 @@ It has two parts: a **Control panel** where you manage teams, scores, matches, c
 - 🎬 Optional animations
 - 🌐 Runs locally, free
 
----
 
 ## 📸 Screenshots
 
@@ -57,11 +50,6 @@ It has two parts: a **Control panel** where you manage teams, scores, matches, c
 <img width="1917" height="935" alt="Screenshot_20261019_111321" src="https://github.com/user-attachments/assets/21551aac-490f-4c7c-8cdd-9e10dca34e71" />
 <img width="1691" height="949" alt="Screenshot_20261019_111246" src="https://github.com/user-attachments/assets/58d9f4de-127f-44b1-9f0c-b89e145dbef9" />
 
-<<<<<<< HEAD
-
-
-=======
->>>>>>> ce3b0b761e87ba6539ed9bd129863826c1bd5dba
 ### Control panel
 
 ![Control panel](docs/screenshots/control-panel.png)
@@ -70,7 +58,6 @@ It has two parts: a **Control panel** where you manage teams, scores, matches, c
 
 ![Scoreboard overlay](docs/screenshots/overlay.png)
 
----
 
 ## 🚀 Download and run
 
@@ -289,7 +276,6 @@ Every page that shows a countdown has its own timer:
 
 A screen that lists the matches being played today, with a banner and **no timer**. Add several (Morning, Evening…) with their own titles, subtitles and an optional **show scores** setting.
 
-=======
 ```
 
 (If you downloaded the ZIP from the terminal: `unzip LIVE-SCORE-main.zip`, then `cd LIVE-SCORE-main/src`.)
@@ -319,8 +305,6 @@ Go to **<http://localhost:5173>** in Chrome or Edge.
 - `npm run dev` already locks the port to `5173` on purpose. Browsers keep your data per address, so if the port changed, your tournament would seem to disappear. If the port is busy, close the other copy of the app first.
 
 The first time you run it on your own computer, a step-by-step **Welcome guide** opens automatically. You can reopen it from **⚙ Backup & settings → Welcome / help**.
-
----
 
 ## 🎥 Using it with OBS Studio
 
@@ -357,7 +341,6 @@ OBS Browser Sources use OBS's own built-in browser, which keeps its own separate
 
 In Streamlabs Desktop, use its custom browser dock option if your version has one.
 
----
 
 ## 🧠 How it works
 
@@ -367,7 +350,6 @@ In Streamlabs Desktop, use its custom browser dock option if your version has on
 - Every change is broadcast to the overlay within about 40 ms and saved to your browser's IndexedDB database shortly after.
 - The top bar always shows what OBS is displaying right now.
 
----
 
 ## 🔍 Detailed features
 
@@ -395,7 +377,6 @@ Browser Source. There is **no server, no database, no account and no cost**.
 
 Built with React, TypeScript and Vite. No other runtime dependencies.
 
----
 
 ## Table of contents
 
@@ -418,7 +399,6 @@ Built with React, TypeScript and Vite. No other runtime dependencies.
 17. [Known limitations](#17-known-limitations)
 18. [Contributing and license](#18-contributing-and-license)
 
----
 
 ## 1. Quick start
 
@@ -450,7 +430,6 @@ Other command:
 The first start loads sample data (three matches, a few pages) so you can see how everything
 looks. Replace it with your own, or use **Reset everything** (see [section 11](#11-saving-backups-and-your-data)).
 
----
 
 ## 2. Setting it up in OBS (read this)
 
@@ -514,12 +493,10 @@ Match data is **shared**: pages, brackets and schedules _read_ matches from your
 score change shows up everywhere at once. The exception is points tables, which keep their own
 teams and fixtures (see [section 8](#8-points-tables)).
 
-> > > > > > > main
 
 The **current match** is the one pages show on their scoreboard card. Change it with
 **Make current** or **Next match →**.
 
-<<<<<<< feature/upcoming
 
 ```text
 Match 1   Phantom Wolves vs Shadow Force   BO3   Quarter Final
@@ -583,7 +560,6 @@ Every page that shows a countdown has its own timer:
 
 A screen that lists the matches being played today, with a banner and **no timer**. Add several (Morning, Evening…) with their own titles, subtitles and an optional **show scores** setting.
 
->>>>>>> ce3b0b761e87ba6539ed9bd129863826c1bd5dba
 ### 📐 Position and size
 
 - The canvas is **1920×1080**.
@@ -678,14 +654,6 @@ Shortcuts are ignored while you type in a text box.
 
 ---
 
-## 📌 Use cases
-
-## =======
-
-<<<<<<< HEAD
----
-
-=======
 ## 4. The Control Panel tour
 
 ```
